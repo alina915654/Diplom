@@ -1,0 +1,48 @@
+# Build results
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.cachefile
+
+# Rider / ReSharper
+.idea/
+*.sln.iml
+_ReSharper*/
+
+# .NET Core
+*.pdb
+*.dll
+*.exe
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded images (если не хочешь заливать все фото)
+wwwroot/images/uploads/*
+!wwwroot/images/uploads/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+appsettings.Development.json
+launchSettings.json   # можно оставить, если не содержит секретов
