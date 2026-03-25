@@ -3,6 +3,11 @@ using Diplom.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Diplom.Controllers;
 
@@ -24,9 +29,11 @@ public class ProductsController : Controller
         return View(await BuildIndexViewModelAsync(searchTerm, categoryId, activityState));
     }
 
+    #region Create Product
+
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CreateProduct(
+    public async Task<IActionResult> Create(
         ProductEditorViewModel input,
         string? searchTerm,
         int? categoryId,
@@ -42,60 +49,60 @@ public class ProductsController : Controller
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        var uploadedPhotoPath = await SaveProductImageAsync(input.Photo);
-
         var product = new Product
         {
             NameProduct = input.NameProduct,
             CategoryId = input.CategoryId,
             Price = input.Price,
             Description = input.Description,
-            PhotoPath = uploadedPhotoPath,
             IsActive = input.IsActive,
             StockQuantity = input.StockQuantity,
-            RecipeMethod = input.RecipeMethod
+            RecipeMethod = input.RecipeMethod,
+            PhotoPath = await SaveProductImageAsync(input.Photo)
         };
 
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(); // получаем ProductId
 
-        var inventory = new Inventory
+        // Inventory
+        _context.Inventories.Add(new Inventory
         {
             ProductId = product.ProductId,
             StockLevel = input.StockQuantity,
             MinStockLevel = 5,
-            ReorderPoint = 10,
-            ExpirationDate = null
-        };
+            ReorderPoint = 10
+        });
 
-        _context.Inventories.Add(inventory);
+        // Движение склада
+        _context.Movements.Add(new Movement
+        {
+            ProductId = product.ProductId,
+            MovementType = "Приход",
+            Quantity = input.StockQuantity,
+            MovementDate = DateTime.Now,
+            Reference = "Создание нового товара"
+        });
+
+        // Лог склада
         _context.WarehouseLogs.Add(new WarehouseLog
         {
             ProductId = product.ProductId,
             ActionType = "Создание",
             Quantity = input.StockQuantity,
             Timestamp = DateTime.Now,
-            Note = "Товар создан из модуля управления ассортиментом."
+            Note = "Новый товар добавлен в ассортимент."
         });
-
-        if (input.StockQuantity > 0)
-        {
-            _context.Movements.Add(new Movement
-            {
-                ProductId = product.ProductId,
-                MovementType = "Приход",
-                Quantity = input.StockQuantity,
-                MovementDate = DateTime.Now,
-                Reference = "Создание товара"
-            });
-        }
 
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        TempData["SuccessMessage"] = $"Товар «{product.NameProduct}» создан.";
+        TempData["SuccessMessage"] = $"Товар «{product.NameProduct}» успешно создан.";
         return RedirectToAction(nameof(Index), new { searchTerm, categoryId, activityState });
     }
+
+    #endregion
+
+    #region Update Product
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -134,18 +141,31 @@ public class ProductsController : Controller
 
         var oldStock = product.StockQuantity;
         var oldPhotoPath = product.PhotoPath;
-        var uploadedPhotoPath = await SaveProductImageAsync(input.Photo);
 
+        // Сохраняем новое фото (если загружено)
+        var newPhotoPath = await SaveProductImageAsync(input.Photo);
+
+        // Обновляем данные товара
         product.NameProduct = input.NameProduct;
         product.CategoryId = input.CategoryId;
         product.Price = input.Price;
         product.Description = input.Description;
-        product.PhotoPath = uploadedPhotoPath ?? input.ExistingPhotoPath ?? oldPhotoPath;
         product.IsActive = input.IsActive;
         product.StockQuantity = input.StockQuantity;
         product.RecipeMethod = input.RecipeMethod;
 
-        var inventory = product.Inventories.FirstOrDefault();
+        if (newPhotoPath != null)
+        {
+            DeleteManagedProductImage(oldPhotoPath);           // удаляем старое
+            product.PhotoPath = newPhotoPath;
+        }
+        else if (!string.IsNullOrEmpty(input.ExistingPhotoPath))
+        {
+            product.PhotoPath = input.ExistingPhotoPath;
+        }
+
+        // Inventory
+        var inventory = product.Inventories.SingleOrDefault();
         if (inventory is null)
         {
             inventory = new Inventory
@@ -155,7 +175,6 @@ public class ProductsController : Controller
                 MinStockLevel = 5,
                 ReorderPoint = 10
             };
-
             _context.Inventories.Add(inventory);
         }
         else
@@ -163,6 +182,7 @@ public class ProductsController : Controller
             inventory.StockLevel = input.StockQuantity;
         }
 
+        // Движение, если изменилось количество
         if (oldStock != input.StockQuantity)
         {
             _context.Movements.Add(new Movement
@@ -175,6 +195,7 @@ public class ProductsController : Controller
             });
         }
 
+        // Лог
         _context.WarehouseLogs.Add(new WarehouseLog
         {
             ProductId = product.ProductId,
@@ -187,15 +208,13 @@ public class ProductsController : Controller
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        if (!string.IsNullOrWhiteSpace(uploadedPhotoPath) &&
-            !string.Equals(oldPhotoPath, uploadedPhotoPath, StringComparison.OrdinalIgnoreCase))
-        {
-            DeleteManagedProductImage(oldPhotoPath);
-        }
-
-        TempData["SuccessMessage"] = $"Товар «{product.NameProduct}» обновлен.";
+        TempData["SuccessMessage"] = $"Товар «{product.NameProduct}» успешно обновлён.";
         return RedirectToAction(nameof(Index), new { searchTerm, categoryId, activityState });
     }
+
+    #endregion
+
+    #region Delete Product
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -211,14 +230,13 @@ public class ProductsController : Controller
             return RedirectToAction(nameof(Index), new { searchTerm, categoryId, activityState });
         }
 
-        var hasDependencies =
-            await _context.SalesDetails.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
-            await _context.PurchaseOrderDetails.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
-            await _context.Movements.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
-            await _context.WarehouseLogs.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
-            await _context.WasteManagements.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
-            await _context.Recipes.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
-            await _context.ProductionCalendars.AsNoTracking().AnyAsync(x => x.ProductId == id);
+        var hasDependencies = await _context.SalesDetails.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
+                              await _context.PurchaseOrderDetails.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
+                              await _context.Movements.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
+                              await _context.WarehouseLogs.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
+                              await _context.WasteManagements.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
+                              await _context.Recipes.AsNoTracking().AnyAsync(x => x.ProductId == id) ||
+                              await _context.ProductionCalendars.AsNoTracking().AnyAsync(x => x.ProductId == id);
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -228,11 +246,9 @@ public class ProductsController : Controller
             product.IsActive = false;
             product.StockQuantity = 0;
 
-            var inventory = product.Inventories.FirstOrDefault();
-            if (inventory is not null)
-            {
+            var inventory = product.Inventories.SingleOrDefault();
+            if (inventory != null)
                 inventory.StockLevel = 0;
-            }
 
             _context.WarehouseLogs.Add(new WarehouseLog
             {
@@ -240,7 +256,7 @@ public class ProductsController : Controller
                 ActionType = "Правка",
                 Quantity = 0,
                 Timestamp = DateTime.Now,
-                Note = "Товар деактивирован вместо удаления из-за связанных данных."
+                Note = "Товар деактивирован вместо удаления."
             });
 
             if (oldStock > 0)
@@ -258,14 +274,13 @@ public class ProductsController : Controller
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            TempData["WarningMessage"] = $"Товар «{product.NameProduct}» не удален физически из-за связанных данных. Он переведен в неактивный статус.";
+            TempData["WarningMessage"] = $"Товар «{product.NameProduct}» деактивирован (есть связанные данные).";
             return RedirectToAction(nameof(Index), new { searchTerm, categoryId, activityState });
         }
 
-        if (product.Inventories.Count > 0)
-        {
+        // Полное удаление
+        if (product.Inventories.Any())
             _context.Inventories.RemoveRange(product.Inventories);
-        }
 
         _context.Products.Remove(product);
         await _context.SaveChangesAsync();
@@ -273,9 +288,13 @@ public class ProductsController : Controller
 
         DeleteManagedProductImage(product.PhotoPath);
 
-        TempData["SuccessMessage"] = $"Товар «{product.NameProduct}» удален.";
+        TempData["SuccessMessage"] = $"Товар «{product.NameProduct}» полностью удалён.";
         return RedirectToAction(nameof(Index), new { searchTerm, categoryId, activityState });
     }
+
+    #endregion
+
+    // Методы CreateCategory, UpdateCategory, DeleteCategory — оставил без изменений (они уже хорошие)
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -293,10 +312,7 @@ public class ProductsController : Controller
             return View("Index", await BuildIndexViewModelAsync(searchTerm, categoryId, activityState, categoryEditor: input));
         }
 
-        var category = new Category
-        {
-            NameCategory = input.NameCategory
-        };
+        var category = new Category { NameCategory = input.NameCategory };
 
         _context.Categories.Add(category);
         await _context.SaveChangesAsync();
@@ -369,6 +385,8 @@ public class ProductsController : Controller
         return RedirectToAction(nameof(Index), new { searchTerm, categoryId, activityState });
     }
 
+    #region Private Helpers
+
     private async Task<ProductsIndexViewModel> BuildIndexViewModelAsync(
         string? searchTerm,
         int? categoryId,
@@ -382,15 +400,17 @@ public class ProductsController : Controller
         ViewData["Title"] = "Товары и категории";
         ViewData["Subtitle"] = "Управление ассортиментом, активностью товаров, категориями и базовыми складскими остатками.";
 
+        // Загружаем категории один раз
         var categories = await _context.Categories
             .AsNoTracking()
             .OrderBy(c => c.NameCategory)
-            .Select(c => new LookupItemViewModel
-            {
-                Id = c.CategoryId,
-                Name = c.NameCategory
-            })
             .ToListAsync();
+
+        var lookupCategories = categories.Select(c => new LookupItemViewModel
+        {
+            Id = c.CategoryId,
+            Name = c.NameCategory
+        }).ToList();
 
         var allProducts = await _context.Products
             .AsNoTracking()
@@ -398,20 +418,18 @@ public class ProductsController : Controller
             .OrderBy(p => p.NameProduct)
             .ToListAsync();
 
-        IEnumerable<Product> filteredProducts = allProducts;
+        var filteredProducts = allProducts.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(normalizedSearch))
         {
             filteredProducts = filteredProducts.Where(p =>
                 p.NameProduct.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                p.Category.NameCategory.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                (p.Category?.NameCategory.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 (p.Description?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
         if (categoryId.HasValue)
-        {
             filteredProducts = filteredProducts.Where(p => p.CategoryId == categoryId.Value);
-        }
 
         filteredProducts = normalizedState switch
         {
@@ -420,12 +438,6 @@ public class ProductsController : Controller
             "lowstock" => filteredProducts.Where(p => p.StockQuantity <= 5),
             _ => filteredProducts
         };
-
-        var categoryItems = await _context.Categories
-            .AsNoTracking()
-            .Include(c => c.Products)
-            .OrderBy(c => c.NameCategory)
-            .ToListAsync();
 
         return new ProductsIndexViewModel
         {
@@ -436,93 +448,65 @@ public class ProductsController : Controller
             SearchTerm = normalizedSearch,
             CategoryId = categoryId,
             ActivityState = normalizedState,
-            Categories = categories,
-            Products = filteredProducts
-                .Select(p => new ProductListItemViewModel
-                {
-                    ProductId = p.ProductId,
-                    NameProduct = p.NameProduct,
-                    CategoryId = p.CategoryId,
-                    CategoryName = p.Category.NameCategory,
-                    Price = p.Price,
-                    Description = p.Description ?? string.Empty,
-                    PhotoPath = p.PhotoPath ?? string.Empty,
-                    IsActive = p.IsActive,
-                    StockQuantity = p.StockQuantity,
-                    RecipeMethod = p.RecipeMethod ?? string.Empty
-                })
-                .ToList(),
-            CategoryItems = categoryItems
-                .Select(c => new CategoryListItemViewModel
-                {
-                    CategoryId = c.CategoryId,
-                    NameCategory = c.NameCategory,
-                    ProductCount = c.Products.Count,
-                    ActiveProductCount = c.Products.Count(p => p.IsActive)
-                })
-                .ToList(),
-            ProductEditor = productEditor ?? new ProductEditorViewModel
+            Categories = lookupCategories,
+            Products = filteredProducts.Select(p => new ProductListItemViewModel
             {
-                IsActive = true
-            },
+                ProductId = p.ProductId,
+                NameProduct = p.NameProduct,
+                CategoryId = p.CategoryId,
+                CategoryName = p.Category?.NameCategory ?? string.Empty,
+                Price = p.Price,
+                Description = p.Description ?? string.Empty,
+                PhotoPath = p.PhotoPath ?? string.Empty,
+                IsActive = p.IsActive,
+                StockQuantity = p.StockQuantity,
+                RecipeMethod = p.RecipeMethod ?? string.Empty
+            }).ToList(),
+            CategoryItems = categories.Select(c => new CategoryListItemViewModel
+            {
+                CategoryId = c.CategoryId,
+                NameCategory = c.NameCategory,
+                ProductCount = c.Products.Count,
+                ActiveProductCount = c.Products.Count(p => p.IsActive)
+            }).ToList(),
+            ProductEditor = productEditor ?? new ProductEditorViewModel { IsActive = true },
             CategoryEditor = categoryEditor ?? new CategoryEditorViewModel()
         };
     }
 
     private async Task ValidateProductAsync(ProductEditorViewModel input)
     {
-        var categoryExists = await _context.Categories
-            .AsNoTracking()
-            .AnyAsync(c => c.CategoryId == input.CategoryId);
-
-        if (!categoryExists)
-        {
+        if (!await _context.Categories.AsNoTracking().AnyAsync(c => c.CategoryId == input.CategoryId))
             ModelState.AddModelError(nameof(ProductEditorViewModel.CategoryId), "Выбранная категория не найдена.");
-        }
 
         var duplicateNameExists = await _context.Products
             .AsNoTracking()
             .AnyAsync(p => p.NameProduct == input.NameProduct && p.ProductId != input.ProductId);
 
         if (duplicateNameExists)
-        {
             ModelState.AddModelError(nameof(ProductEditorViewModel.NameProduct), "Товар с таким названием уже существует.");
-        }
 
         if (input.Photo is not null)
         {
-            var extension = Path.GetExtension(input.Photo.FileName);
-            var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".gif"
-            };
+            var ext = Path.GetExtension(input.Photo.FileName)?.ToLowerInvariant();
+            var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
 
-            if (!allowedExtensions.Contains(extension))
-            {
+            if (!allowed.Contains(ext))
                 ModelState.AddModelError(nameof(ProductEditorViewModel.Photo), "Допустимы только изображения JPG, PNG, WEBP или GIF.");
-            }
 
             if (input.Photo.Length > 5 * 1024 * 1024)
-            {
                 ModelState.AddModelError(nameof(ProductEditorViewModel.Photo), "Размер изображения не должен превышать 5 МБ.");
-            }
         }
     }
 
     private async Task ValidateCategoryAsync(CategoryEditorViewModel input)
     {
-        var duplicateNameExists = await _context.Categories
+        var duplicate = await _context.Categories
             .AsNoTracking()
             .AnyAsync(c => c.NameCategory == input.NameCategory && c.CategoryId != input.CategoryId);
 
-        if (duplicateNameExists)
-        {
+        if (duplicate)
             ModelState.AddModelError(nameof(CategoryEditorViewModel.NameCategory), "Категория с таким названием уже существует.");
-        }
     }
 
     private static void NormalizeProductInput(ProductEditorViewModel input)
@@ -549,16 +533,12 @@ public class ProductsController : Controller
 
     private async Task<string?> SaveProductImageAsync(IFormFile? photo)
     {
-        if (photo is null || photo.Length == 0)
-        {
-            return null;
-        }
+        if (photo is null || photo.Length == 0) return null;
 
         var uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "products");
         Directory.CreateDirectory(uploadsFolder);
 
-        var extension = Path.GetExtension(photo.FileName);
-        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var fileName = $"{Guid.NewGuid():N}{Path.GetExtension(photo.FileName)}";
         var filePath = Path.Combine(uploadsFolder, fileName);
 
         await using var stream = System.IO.File.Create(filePath);
@@ -569,18 +549,16 @@ public class ProductsController : Controller
 
     private void DeleteManagedProductImage(string? photoPath)
     {
-        if (string.IsNullOrWhiteSpace(photoPath) ||
+        if (string.IsNullOrWhiteSpace(photoPath) || 
             !photoPath.StartsWith("/uploads/products/", StringComparison.OrdinalIgnoreCase))
-        {
             return;
-        }
 
         var relativePath = photoPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
         var fullPath = Path.Combine(_environment.WebRootPath, relativePath);
 
         if (System.IO.File.Exists(fullPath))
-        {
             System.IO.File.Delete(fullPath);
-        }
     }
+
+    #endregion
 }

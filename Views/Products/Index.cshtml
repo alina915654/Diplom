@@ -392,10 +392,11 @@
             </div>
 
             <form id="productEditorForm"
-                  asp-action="@(isProductEditMode ? "UpdateProduct" : "CreateProduct")"
+                  asp-action="@(isProductEditMode ? "UpdateProduct" : "Create")"
                   method="post"
                   enctype="multipart/form-data"
                   class="module-stack">
+                
                 <input type="hidden" id="productId" name="ProductId" value="@Model.ProductEditor.ProductId" />
                 <input type="hidden" id="productExistingPhotoPath" name="ExistingPhotoPath" value="@Model.ProductEditor.ExistingPhotoPath" />
                 <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
@@ -530,11 +531,7 @@
                                 </button>
 
                                 <form asp-action="DeleteCategory"
-                                      method="post"
-                                      data-confirm="true"
-                                      data-confirm-title="Удалить категорию?"
-                                      data-confirm-message="Категория будет удалена только если к ней не привязаны товары."
-                                      data-confirm-accept="Удалить">
+                                      method="post">
                                     <input type="hidden" name="id" value="@item.CategoryId" />
                                     <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
                                     <input type="hidden" name="categoryId" value="@Model.CategoryId" />
@@ -667,7 +664,7 @@
 
 @section Scripts {
     <script>
-        const productCreateAction = '@Url.Action("CreateProduct", "Products")';
+        const productCreateAction = '@Url.Action("Create", "Products")';
         const productUpdateAction = '@Url.Action("UpdateProduct", "Products")';
         const categoryCreateAction = '@Url.Action("CreateCategory", "Products")';
         const categoryUpdateAction = '@Url.Action("UpdateCategory", "Products")';
@@ -726,10 +723,7 @@
             document.getElementById('productIsActive').checked = data.isActive === 'true';
             updateProductPreview(data.photoPath || '');
 
-            form.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest'
-            });
+            form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         function startCategoryCreateMode() {
@@ -756,10 +750,7 @@
             document.getElementById('categoryIdEditor').value = data.categoryId || '';
             document.getElementById('categoryNameEditor').value = data.nameCategory || '';
 
-            form.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest'
-            });
+            form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         document.getElementById('productPhoto').addEventListener('change', function (event) {
