@@ -1,0 +1,317 @@
+@model Diplom.ViewModels.ReportsIndexViewModel
+@using System.Globalization
+
+@section Styles {
+    <style>
+        .report-bars {
+            display: grid;
+            gap: 14px;
+        }
+
+        .report-bar-row {
+            display: grid;
+            gap: 8px;
+        }
+
+        .report-bar-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .report-bar-track {
+            width: 100%;
+            height: 12px;
+            border-radius: 999px;
+            background: rgba(210, 95, 210, 0.12);
+            overflow: hidden;
+        }
+
+        .report-bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #A600A6 0%, #D25FD2 100%);
+        }
+
+        .report-day-chart {
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(72px, 1fr);
+            gap: 12px;
+            overflow-x: auto;
+            align-items: end;
+        }
+
+        .report-day-column {
+            display: grid;
+            gap: 8px;
+        }
+
+        .report-day-track {
+            height: 180px;
+            border-radius: 18px;
+            background: rgba(210, 95, 210, 0.10);
+            display: flex;
+            align-items: end;
+            padding: 6px;
+        }
+
+        .report-day-fill {
+            width: 100%;
+            min-height: 8px;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #D25FD2 0%, #7C1F7C 100%);
+        }
+
+        .report-day-label,
+        .report-day-value {
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .report-day-value {
+            color: var(--primary-dark);
+            font-weight: 700;
+        }
+
+        .report-day-label {
+            color: var(--muted);
+            font-weight: 700;
+        }
+    </style>
+}
+
+<div class="module-stack">
+    <article class="surface module-toolbar-surface">
+        <div class="module-action-row">
+            <a asp-action="ExportExcel" class="btn btn-primary">
+                <i class="bi bi-file-earmark-excel-fill"></i>
+                Экспорт в Excel
+            </a>
+
+            <a asp-action="ExportPdf" class="btn btn-secondary">
+                <i class="bi bi-file-earmark-pdf-fill"></i>
+                Экспорт в PDF
+            </a>
+        </div>
+    </article>
+
+    <div class="metrics-grid">
+        <article class="metric-card">
+            <p class="metric-title">Заказов сегодня</p>
+            <p class="metric-value">@Model.OrdersToday</p>
+            <p class="metric-subtitle">Количество оформленных чеков</p>
+        </article>
+
+        <article class="metric-card">
+            <p class="metric-title">Выручка сегодня</p>
+            <p class="metric-value">@Model.RevenueToday.ToString("N2") ₽</p>
+            <p class="metric-subtitle">Оборот за текущий день</p>
+        </article>
+
+        <article class="metric-card">
+            <p class="metric-title">Заказов за месяц</p>
+            <p class="metric-value">@Model.OrdersThisMonth</p>
+            <p class="metric-subtitle">Всего с начала месяца</p>
+        </article>
+
+        <article class="metric-card">
+            <p class="metric-title">Средний чек за месяц</p>
+            <p class="metric-value">@Model.AverageCheckThisMonth.ToString("N2") ₽</p>
+            <p class="metric-subtitle">Средняя сумма продажи</p>
+        </article>
+    </div>
+
+    <div class="two-column">
+        <article class="surface">
+            <div class="surface-header">
+                <h3>Продажи по дням</h3>
+            </div>
+
+            @if (Model.DailySalesChart.Count == 0)
+            {
+                <div class="dashboard-empty">Нет данных для построения графика.</div>
+            }
+            else
+            {
+                <div class="report-day-chart">
+                    @foreach (var item in Model.DailySalesChart)
+                    {
+                        <div class="report-day-column">
+                            <div class="report-day-value">@item.Revenue.ToString("N0") ₽</div>
+                            <div class="report-day-track">
+                                <div class="report-day-fill"
+                                     style="@($"height:{item.PercentOfMax.ToString("0.##", CultureInfo.InvariantCulture)}%;")">
+                                </div>
+                            </div>
+                            <div class="report-day-label">@item.DayLabel</div>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="surface">
+            <div class="surface-header">
+                <h3>Структура продаж по типам</h3>
+            </div>
+
+            @if (Model.SalesByType.Count == 0)
+            {
+                <div class="dashboard-empty">Нет данных по типам заказов.</div>
+            }
+            else
+            {
+                <div class="report-bars">
+                    @foreach (var item in Model.SalesByType)
+                    {
+                        <div class="report-bar-row">
+                            <div class="report-bar-head">
+                                <strong>@item.TypeName</strong>
+                                <strong>@item.Revenue.ToString("N2") ₽</strong>
+                            </div>
+                            <div class="report-bar-track">
+                                <div class="report-bar-fill"
+                                     style="@($"width:{item.PercentOfTotal.ToString("0.##", CultureInfo.InvariantCulture)}%;")">
+                                </div>
+                            </div>
+                            <small class="muted">@item.OrdersCount заказов, @item.PercentOfTotal.ToString("0.#")%</small>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+    </div>
+
+    <div class="two-column">
+        <article class="surface">
+            <div class="surface-header">
+                <h3>Популярные товары</h3>
+            </div>
+
+            @if (Model.TopProducts.Count == 0)
+            {
+                <div class="dashboard-empty">Нет данных по товарам.</div>
+            }
+            else
+            {
+                <div class="rank-list">
+                    @foreach (var item in Model.TopProducts)
+                    {
+                        <div class="rank-item">
+                            <div>
+                                <strong>@item.ProductName</strong>
+                                <small class="muted">Продаж: @item.SalesCount</small>
+                            </div>
+                            <strong>@item.QuantitySold шт.</strong>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="surface">
+            <div class="surface-header">
+                <h3>Статусы заказов</h3>
+            </div>
+
+            @if (Model.StatusSummary.Count == 0)
+            {
+                <div class="dashboard-empty">Нет данных по статусам.</div>
+            }
+            else
+            {
+                <div class="rank-list">
+                    @foreach (var item in Model.StatusSummary)
+                    {
+                        <div class="rank-item">
+                            <div>
+                                <strong>@item.StatusName</strong>
+                                <small class="muted">@item.OrdersCount заказов</small>
+                            </div>
+                            <strong>@item.TotalAmount.ToString("N2") ₽</strong>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+    </div>
+
+    <article class="surface">
+        <div class="surface-header">
+            <h3>Эффективность сотрудников</h3>
+        </div>
+
+        @if (Model.EmployeePerformance.Count == 0)
+        {
+            <div class="dashboard-empty">Нет данных по сотрудникам.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>Сотрудник</th>
+                            <th>Роль</th>
+                            <th>Продаж</th>
+                            <th>Выручка</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.EmployeePerformance)
+                        {
+                            <tr>
+                                <td>@item.FullName</td>
+                                <td>@item.RoleName</td>
+                                <td>@item.SalesCount</td>
+                                <td>@item.TotalAmount.ToString("N2") ₽</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </article>
+
+    <article class="surface">
+        <div class="surface-header">
+            <h3>Последние продажи</h3>
+        </div>
+
+        @if (Model.RecentSales.Count == 0)
+        {
+            <div class="dashboard-empty">Продаж пока нет.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Чек</th>
+                            <th>Дата</th>
+                            <th>Клиент</th>
+                            <th>Кассир</th>
+                            <th>Статус</th>
+                            <th>Сумма</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in Model.RecentSales)
+                        {
+                            <tr>
+                                <td>@sale.CheckNumber</td>
+                                <td>@sale.SaleDate.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@sale.ClientName</td>
+                                <td>@sale.CashierName</td>
+                                <td>@sale.StatusName</td>
+                                <td>@sale.FinalAmount.ToString("N2") ₽</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </article>
+</div>

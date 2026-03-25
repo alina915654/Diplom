@@ -1,0 +1,316 @@
+@model Diplom.ViewModels.SuppliersIndexViewModel
+
+@{
+    var isEditMode = Model.Editor.SupplierId.HasValue;
+}
+
+<div class="module-stack">
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="flash-banner flash-banner-success module-reveal" style="--delay:0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+
+    @if (TempData["WarningMessage"] is string warningMessage)
+    {
+        <div class="flash-banner flash-banner-warning module-reveal" style="--delay:0;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@warningMessage</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="flash-banner flash-banner-error module-reveal" style="--delay:0;">
+            <i class="bi bi-x-octagon-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <article class="surface module-hero module-reveal" style="--delay:1;">
+        <div class="module-hero__content">
+            <div class="module-hero__icon">
+                <i class="bi bi-building"></i>
+            </div>
+
+            <div class="module-hero__text">
+                <p class="eyebrow">Справочник контрагентов</p>
+                <h3>Поставщики</h3>
+                <p class="muted">
+                    Управляйте карточками поставщиков, контактными лицами и данными для закупок.
+                    Удаление защищено от потери истории связанных заказов и поставок.
+                </p>
+
+                <div class="module-hero__pills">
+                    <span class="module-hero__pill">
+                        <i class="bi bi-buildings-fill"></i>
+                        Всего поставщиков: <strong>@Model.TotalSuppliers</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-cart-check"></i>
+                        С закупками: <strong>@Model.SuppliersWithOrders</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-search"></i>
+                        По фильтру найдено: <strong>@Model.FilteredSuppliersCount</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <form method="get" asp-action="Index" class="surface module-toolbar-surface module-reveal" style="--delay:2;">
+        <div class="module-filter-grid" style="grid-template-columns: 1fr;">
+            <label>
+                Поиск
+                <input type="search"
+                       name="searchTerm"
+                       value="@Model.SearchTerm"
+                       placeholder="Компания, контактное лицо, телефон, email, адрес" />
+            </label>
+        </div>
+
+        <div class="module-action-row">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search"></i>
+                Найти
+            </button>
+
+            <a asp-action="Index" class="btn btn-ghost">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сбросить
+            </a>
+
+            <button type="button" class="btn btn-secondary" onclick="startSupplierCreateMode();">
+                <i class="bi bi-plus-square-fill"></i>
+                Новый поставщик
+            </button>
+        </div>
+    </form>
+
+    <div class="metrics-grid">
+        <article class="metric-card module-reveal" style="--delay:3;">
+            <p class="metric-title">Всего поставщиков</p>
+            <p class="metric-value">@Model.TotalSuppliers</p>
+            <p class="metric-subtitle">Карточек контрагентов в системе</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:4;">
+            <p class="metric-title">Связаны с закупками</p>
+            <p class="metric-value">@Model.SuppliersWithOrders</p>
+            <p class="metric-subtitle">Есть история заказов поставщику</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:5;">
+            <p class="metric-title">Связаны с поставками</p>
+            <p class="metric-value">@Model.SuppliersWithBatches</p>
+            <p class="metric-subtitle">Есть записи о поставках партий</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:6;">
+            <p class="metric-title">В выборке</p>
+            <p class="metric-value">@Model.FilteredSuppliersCount</p>
+            <p class="metric-subtitle">Показаны после поиска</p>
+        </article>
+    </div>
+
+    <div class="module-crud-layout">
+        <article class="surface module-reveal" style="--delay:7;">
+            <div class="surface-header">
+                <div>
+                    <h3>Список поставщиков</h3>
+                    <p class="muted" style="margin: 6px 0 0;">
+                        Результат поиска по справочнику поставщиков.
+                    </p>
+                </div>
+
+                <span class="dashboard-badge">@Model.Suppliers.Count записей</span>
+            </div>
+
+            @if (Model.Suppliers.Count == 0)
+            {
+                <div class="dashboard-empty">По текущему поиску поставщики не найдены.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Компания</th>
+                                <th>Контакт</th>
+                                <th>Телефон</th>
+                                <th>Email</th>
+                                <th>Связи</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var supplier in Model.Suppliers)
+                            {
+                                <tr>
+                                    <td>@supplier.CompanyName</td>
+                                    <td>@(string.IsNullOrWhiteSpace(supplier.ContactPerson) ? "—" : supplier.ContactPerson)</td>
+                                    <td>@supplier.Phone</td>
+                                    <td>@(string.IsNullOrWhiteSpace(supplier.Email) ? "—" : supplier.Email)</td>
+                                    <td>
+                                        <div class="product-name-cell">
+                                            <strong>Закупок: @supplier.PurchaseOrdersCount</strong>
+                                            <small>Поставок партий: @supplier.SupplyBatchesCount</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <button type="button"
+                                                    class="btn btn-ghost btn-sm"
+                                                    onclick="startSupplierEditMode(this);"
+                                                    data-supplier-id="@supplier.SupplierId"
+                                                    data-company-name="@supplier.CompanyName"
+                                                    data-contact-person="@supplier.ContactPerson"
+                                                    data-phone="@supplier.Phone"
+                                                    data-email="@supplier.Email"
+                                                    data-address="@supplier.Address">
+                                                <i class="bi bi-pencil-square"></i>
+                                                Изменить
+                                            </button>
+
+                                            <form asp-action="Delete"
+                                                  method="post"
+                                                  data-confirm="true"
+                                                  data-confirm-title="Удалить поставщика?"
+                                                  data-confirm-message="Поставщик будет удален только если у него нет связанных закупок и поставок."
+                                                  data-confirm-accept="Удалить">
+                                                <input type="hidden" name="id" value="@supplier.SupplierId" />
+                                                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+
+                                                <button type="submit" class="btn btn-secondary btn-sm">
+                                                    <i class="bi bi-trash3-fill"></i>
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+
+        <aside class="surface sticky-surface module-editor-card module-reveal" style="--delay:8;">
+            <div class="surface-header">
+                <div>
+                    <h3 id="supplierEditorTitle">@(isEditMode ? "Редактирование поставщика" : "Новый поставщик")</h3>
+                    <p id="supplierEditorSubtitle" class="muted" style="margin: 6px 0 0;">
+                        @(isEditMode
+                            ? "Измените карточку поставщика и сохраните обновления."
+                            : "Заполните данные нового поставщика для закупок.")
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startSupplierCreateMode();">
+                    <i class="bi bi-plus-circle"></i>
+                    Очистить
+                </button>
+            </div>
+
+            <div asp-validation-summary="All" class="flash-banner flash-banner-error validation-banner @(ViewData.ModelState.IsValid ? "hidden" : string.Empty)">
+            </div>
+
+            <form id="supplierEditorForm"
+                  asp-action="@(isEditMode ? "Update" : "Create")"
+                  method="post"
+                  class="module-stack">
+                <input type="hidden" id="supplierId" name="SupplierId" value="@Model.Editor.SupplierId" />
+                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+
+                <div class="form-grid">
+                    <label class="form-span-2">
+                        Компания
+                        <input id="supplierCompanyName" name="CompanyName" value="@Model.Editor.CompanyName" maxlength="100" />
+                    </label>
+
+                    <label>
+                        Контактное лицо
+                        <input id="supplierContactPerson" name="ContactPerson" value="@Model.Editor.ContactPerson" maxlength="100" />
+                    </label>
+
+                    <label>
+                        Телефон
+                        <input id="supplierPhone" name="Phone" value="@Model.Editor.Phone" maxlength="20" />
+                    </label>
+
+                    <label class="form-span-2">
+                        Email
+                        <input id="supplierEmail" name="Email" value="@Model.Editor.Email" maxlength="100" />
+                    </label>
+
+                    <label class="form-span-2">
+                        Адрес
+                        <input id="supplierAddress" name="Address" value="@Model.Editor.Address" maxlength="200" />
+                    </label>
+                </div>
+
+                <div class="module-action-row">
+                    <button id="supplierSubmitButton" type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill"></i>
+                        @(isEditMode ? "Сохранить изменения" : "Создать поставщика")
+                    </button>
+
+                    <button type="button" class="btn btn-secondary" onclick="startSupplierCreateMode();">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сбросить форму
+                    </button>
+                </div>
+            </form>
+        </aside>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const supplierCreateAction = '@Url.Action("Create", "Suppliers")';
+        const supplierUpdateAction = '@Url.Action("Update", "Suppliers")';
+
+        function startSupplierCreateMode() {
+            const form = document.getElementById('supplierEditorForm');
+
+            form.action = supplierCreateAction;
+            document.getElementById('supplierEditorTitle').textContent = 'Новый поставщик';
+            document.getElementById('supplierEditorSubtitle').textContent = 'Заполните данные нового поставщика для закупок.';
+            document.getElementById('supplierSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Создать поставщика';
+
+            document.getElementById('supplierId').value = '';
+            document.getElementById('supplierCompanyName').value = '';
+            document.getElementById('supplierContactPerson').value = '';
+            document.getElementById('supplierPhone').value = '';
+            document.getElementById('supplierEmail').value = '';
+            document.getElementById('supplierAddress').value = '';
+        }
+
+        function startSupplierEditMode(button) {
+            const form = document.getElementById('supplierEditorForm');
+            const data = button.dataset;
+
+            form.action = supplierUpdateAction;
+            document.getElementById('supplierEditorTitle').textContent = 'Редактирование поставщика';
+            document.getElementById('supplierEditorSubtitle').textContent = 'Измените карточку поставщика и сохраните обновления.';
+            document.getElementById('supplierSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Сохранить изменения';
+
+            document.getElementById('supplierId').value = data.supplierId || '';
+            document.getElementById('supplierCompanyName').value = data.companyName || '';
+            document.getElementById('supplierContactPerson').value = data.contactPerson || '';
+            document.getElementById('supplierPhone').value = data.phone || '';
+            document.getElementById('supplierEmail').value = data.email || '';
+            document.getElementById('supplierAddress').value = data.address || '';
+
+            form.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+    </script>
+}

@@ -1,0 +1,509 @@
+@model Diplom.ViewModels.EmployeesIndexViewModel
+
+@{
+    var isEditMode = Model.Editor.UserId.HasValue;
+}
+
+@section Styles {
+    <style>
+        .employees-grid {
+            display: grid;
+            gap: 18px;
+        }
+
+        .employees-summary {
+            display: grid;
+            gap: 12px;
+        }
+
+        .employee-mini-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(210, 95, 210, 0.16);
+            background: rgba(255, 255, 255, 0.52);
+        }
+
+        .employee-mini-card strong {
+            display: block;
+            color: var(--primary-dark);
+            font-size: 18px;
+        }
+
+        .employee-mini-card small {
+            color: var(--muted);
+        }
+
+        .employee-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .employee-name-cell {
+            display: grid;
+            gap: 4px;
+        }
+
+        .employee-name-cell strong {
+            line-height: 1.2;
+        }
+
+        .employee-name-cell small {
+            color: var(--muted);
+        }
+    </style>
+}
+
+<div class="module-stack">
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="flash-banner flash-banner-success module-reveal" style="--delay:0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+
+    @if (TempData["WarningMessage"] is string warningMessage)
+    {
+        <div class="flash-banner flash-banner-warning module-reveal" style="--delay:0;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@warningMessage</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="flash-banner flash-banner-error module-reveal" style="--delay:0;">
+            <i class="bi bi-x-octagon-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <article class="surface module-hero module-reveal" style="--delay:1;">
+        <div class="module-hero__content">
+            <div class="module-hero__icon">
+                <i class="bi bi-people-fill"></i>
+            </div>
+
+            <div class="module-hero__text">
+                <p class="eyebrow">Кадровый модуль</p>
+                <h3>Сотрудники</h3>
+                <p class="muted">
+                    Управляйте карточками сотрудников, ролями, контактными данными и статусами.
+                    Фильтры и поиск работают без отдельной страницы, а редактор закреплен справа.
+                </p>
+
+                <div class="module-hero__pills">
+                    <span class="module-hero__pill">
+                        <i class="bi bi-person-vcard"></i>
+                        Всего сотрудников: <strong>@Model.TotalEmployees</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-person-check"></i>
+                        Активные: <strong>@Model.ActiveEmployees</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-search"></i>
+                        Найдено по фильтру: <strong>@Model.Employees.Count</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <form method="get" asp-action="Index" class="surface module-toolbar-surface module-reveal" style="--delay:2;">
+        <div class="module-filter-grid">
+            <label>
+                Поиск
+                <input type="search"
+                       name="searchTerm"
+                       value="@Model.SearchTerm"
+                       placeholder="ФИО, логин, телефон или email" />
+            </label>
+
+            <label>
+                Роль
+                <select name="roleId">
+                    <option value="">Все роли</option>
+                    @foreach (var role in Model.Roles)
+                    {
+                        <option value="@role.Id" selected="@(Model.RoleId == role.Id ? "selected" : null)">
+                            @role.Name
+                        </option>
+                    }
+                </select>
+            </label>
+
+            <label>
+                Статус
+                <select name="status">
+                    <option value="all" selected="@(Model.Status == "all" ? "selected" : null)">Все</option>
+                    <option value="active" selected="@(Model.Status == "active" ? "selected" : null)">Активные</option>
+                    <option value="dismissed" selected="@(Model.Status == "dismissed" ? "selected" : null)">Неактивные</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="module-action-row">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search"></i>
+                Применить фильтры
+            </button>
+
+            <a asp-action="Index" class="btn btn-ghost">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сбросить
+            </a>
+
+            <button type="button" class="btn btn-secondary" onclick="startEmployeeCreateMode();">
+                <i class="bi bi-person-plus-fill"></i>
+                Новый сотрудник
+            </button>
+        </div>
+    </form>
+
+    <div class="metrics-grid">
+        <article class="metric-card module-reveal" style="--delay:3;">
+            <p class="metric-title">Всего сотрудников</p>
+            <p class="metric-value">@Model.TotalEmployees</p>
+            <p class="metric-subtitle">Карточек пользователей в системе</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:4;">
+            <p class="metric-title">Активные</p>
+            <p class="metric-value">@Model.ActiveEmployees</p>
+            <p class="metric-subtitle">Работают в настоящий момент</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:5;">
+            <p class="metric-title">Неактивные</p>
+            <p class="metric-value">@Model.DismissedEmployees</p>
+            <p class="metric-subtitle">Есть дата увольнения</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:6;">
+            <p class="metric-title">Наняты в этом году</p>
+            <p class="metric-value">@Model.HiredThisYear</p>
+            <p class="metric-subtitle">Новые сотрудники за текущий год</p>
+        </article>
+    </div>
+
+    <div class="module-crud-layout">
+        <article class="surface module-reveal" style="--delay:7;">
+            <div class="surface-header">
+                <div>
+                    <h3>Список сотрудников</h3>
+                    <p class="muted" style="margin: 6px 0 0;">
+                        Показываются записи с учетом поиска и фильтров.
+                    </p>
+                </div>
+
+                <span class="dashboard-badge">@Model.Employees.Count записей</span>
+            </div>
+
+            @if (Model.Employees.Count == 0)
+            {
+                <div class="dashboard-empty">
+                    По текущим фильтрам сотрудники не найдены.
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Сотрудник</th>
+                                <th>Роль</th>
+                                <th>Телефон</th>
+                                <th>Email</th>
+                                <th>Принят</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var employee in Model.Employees)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="employee-name-cell">
+                                            <strong>@employee.FullName</strong>
+                                            <small>Логин: @employee.Login</small>
+                                        </div>
+                                    </td>
+                                    <td>@employee.RoleName</td>
+                                    <td>@employee.Phone</td>
+                                    <td>@(string.IsNullOrWhiteSpace(employee.Email) ? "—" : employee.Email)</td>
+                                    <td>@(employee.HireDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                    <td>
+                                        @if (employee.IsActive)
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--ok">Активен</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--muted">Неактивен</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <button type="button"
+                                                    class="btn btn-ghost btn-sm"
+                                                    onclick="startEmployeeEditMode(this);"
+                                                    data-user-id="@employee.UserId"
+                                                    data-full-name="@employee.FullName"
+                                                    data-login="@employee.Login"
+                                                    data-role-id="@employee.RoleId"
+                                                    data-phone="@employee.Phone"
+                                                    data-email="@employee.Email"
+                                                    data-address="@employee.Address"
+                                                    data-birth-date="@(employee.BirthDate?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                                                    data-hire-date="@(employee.HireDate?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                                                    data-dismissal-date="@(employee.DismissalDate?.ToString("yyyy-MM-dd") ?? string.Empty)">
+                                                <i class="bi bi-pencil-square"></i>
+                                                Изменить
+                                            </button>
+
+                                            <form asp-action="Delete"
+                                                  method="post"
+                                                  data-confirm="true"
+                                                  data-confirm-title="Удалить сотрудника?"
+                                                  data-confirm-message="Если у сотрудника уже есть связанные продажи, смены или доставки, запись не будет удалена физически и система переведет ее в неактивный статус."
+                                                  data-confirm-accept="Удалить">
+                                                <input type="hidden" name="id" value="@employee.UserId" />
+                                                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                                                <input type="hidden" name="roleId" value="@Model.RoleId" />
+                                                <input type="hidden" name="status" value="@Model.Status" />
+
+                                                <button type="submit" class="btn btn-secondary btn-sm">
+                                                    <i class="bi bi-person-dash-fill"></i>
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+
+        <aside class="surface sticky-surface module-editor-card module-reveal" style="--delay:8;">
+            <div class="surface-header">
+                <div>
+                    <h3 id="employeeEditorTitle">@(isEditMode ? "Редактирование сотрудника" : "Новый сотрудник")</h3>
+                    <p id="employeeEditorSubtitle" class="muted" style="margin: 6px 0 0;">
+                        @(isEditMode
+                            ? "Измените карточку сотрудника и сохраните обновления."
+                            : "Заполните форму для добавления новой учетной записи.")
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startEmployeeCreateMode();">
+                    <i class="bi bi-plus-circle"></i>
+                    Очистить
+                </button>
+            </div>
+
+            <div asp-validation-summary="All" class="flash-banner flash-banner-error validation-banner @(ViewData.ModelState.IsValid ? "hidden" : string.Empty)">
+            </div>
+
+            <form id="employeeEditorForm"
+                  asp-action="@(isEditMode ? "Update" : "Create")"
+                  method="post"
+                  class="module-stack">
+                <input type="hidden" id="employeeUserId" name="UserId" value="@Model.Editor.UserId" />
+                <input type="hidden" name="filterSearchTerm" value="@Model.SearchTerm" />
+                <input type="hidden" name="filterRoleId" value="@Model.RoleId" />
+                <input type="hidden" name="filterStatus" value="@Model.Status" />
+
+                <div class="form-grid">
+                    <label class="form-span-2">
+                        ФИО
+                        <input id="employeeFullName" name="FullName" value="@Model.Editor.FullName" maxlength="100" />
+                    </label>
+
+                    <label>
+                        Логин
+                        <input id="employeeLogin" name="Login" value="@Model.Editor.Login" maxlength="50" />
+                    </label>
+
+                    <label>
+                        Роль
+                        <select id="employeeRoleId" name="RoleId">
+                            <option value="">Выберите роль</option>
+                            @foreach (var role in Model.Roles)
+                            {
+                                <option value="@role.Id" selected="@(Model.Editor.RoleId == role.Id ? "selected" : null)">
+                                    @role.Name
+                                </option>
+                            }
+                        </select>
+                    </label>
+
+                    <label>
+                        Телефон
+                        <input id="employeePhone" name="Phone" value="@Model.Editor.Phone" maxlength="20" />
+                    </label>
+
+                    <label>
+                        Email
+                        <input id="employeeEmail" name="Email" value="@Model.Editor.Email" maxlength="100" />
+                    </label>
+
+                    <label class="form-span-2">
+                        Адрес
+                        <input id="employeeAddress" name="Address" value="@Model.Editor.Address" maxlength="255" />
+                    </label>
+
+                    <label>
+                        Дата рождения
+                        <input id="employeeBirthDate" type="date" name="BirthDate" value="@(Model.Editor.BirthDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                    </label>
+
+                    <label>
+                        Дата приема
+                        <input id="employeeHireDate" type="date" name="HireDate" value="@(Model.Editor.HireDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                    </label>
+
+                    <label>
+                        Дата увольнения
+                        <input id="employeeDismissalDate" type="date" name="DismissalDate" value="@(Model.Editor.DismissalDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                    </label>
+
+                    <label>
+                        Пароль
+                        <input id="employeePassword"
+                               type="password"
+                               name="Password"
+                               value=""
+                               maxlength="50"
+                               placeholder="@(isEditMode ? "Оставьте пустым, чтобы не менять" : "Введите пароль")" />
+                    </label>
+                </div>
+
+                <div class="module-action-row">
+                    <button id="employeeSubmitButton" type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill"></i>
+                        @(isEditMode ? "Сохранить изменения" : "Создать сотрудника")
+                    </button>
+
+                    <button type="button" class="btn btn-secondary" onclick="startEmployeeCreateMode();">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сбросить форму
+                    </button>
+                </div>
+            </form>
+        </aside>
+    </div>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:9;">
+            <div class="surface-header">
+                <h3>Распределение по ролям</h3>
+                <span class="dashboard-badge">Структура команды</span>
+            </div>
+
+            @if (Model.ByRole.Count == 0)
+            {
+                <div class="dashboard-empty">Данных по ролям пока нет.</div>
+            }
+            else
+            {
+                <div class="rank-list">
+                    @foreach (var item in Model.ByRole)
+                    {
+                        <div class="rank-item">
+                            <strong>@item.RoleName</strong>
+                            <strong>@item.Count</strong>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="surface module-reveal" style="--delay:10;">
+            <div class="surface-header">
+                <h3>Быстрая сводка</h3>
+                <span class="dashboard-badge">Кадровая динамика</span>
+            </div>
+
+            <div class="employees-summary">
+                <div class="employee-mini-card">
+                    <strong>@Model.ActiveEmployees</strong>
+                    <small>Активных сотрудников сейчас в системе</small>
+                </div>
+
+                <div class="employee-mini-card">
+                    <strong>@Model.DismissedEmployees</strong>
+                    <small>Карточек переведены в неактивный статус</small>
+                </div>
+
+                <div class="employee-mini-card">
+                    <strong>@Model.HiredThisYear</strong>
+                    <small>Новых сотрудников с начала года</small>
+                </div>
+            </div>
+        </article>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const employeeCreateAction = '@Url.Action("Create", "Employees")';
+        const employeeUpdateAction = '@Url.Action("Update", "Employees")';
+
+        function startEmployeeCreateMode() {
+            const form = document.getElementById('employeeEditorForm');
+
+            form.action = employeeCreateAction;
+            document.getElementById('employeeEditorTitle').textContent = 'Новый сотрудник';
+            document.getElementById('employeeEditorSubtitle').textContent = 'Заполните форму для добавления новой учетной записи.';
+            document.getElementById('employeeSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Создать сотрудника';
+
+            document.getElementById('employeeUserId').value = '';
+            document.getElementById('employeeFullName').value = '';
+            document.getElementById('employeeLogin').value = '';
+            document.getElementById('employeeRoleId').value = '';
+            document.getElementById('employeePhone').value = '';
+            document.getElementById('employeeEmail').value = '';
+            document.getElementById('employeeAddress').value = '';
+            document.getElementById('employeeBirthDate').value = '';
+            document.getElementById('employeeHireDate').value = '';
+            document.getElementById('employeeDismissalDate').value = '';
+            document.getElementById('employeePassword').value = '';
+            document.getElementById('employeePassword').placeholder = 'Введите пароль';
+        }
+
+        function startEmployeeEditMode(button) {
+            const form = document.getElementById('employeeEditorForm');
+            const data = button.dataset;
+
+            form.action = employeeUpdateAction;
+            document.getElementById('employeeEditorTitle').textContent = 'Редактирование сотрудника';
+            document.getElementById('employeeEditorSubtitle').textContent = 'Измените карточку сотрудника и сохраните обновления.';
+            document.getElementById('employeeSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Сохранить изменения';
+
+            document.getElementById('employeeUserId').value = data.userId || '';
+            document.getElementById('employeeFullName').value = data.fullName || '';
+            document.getElementById('employeeLogin').value = data.login || '';
+            document.getElementById('employeeRoleId').value = data.roleId || '';
+            document.getElementById('employeePhone').value = data.phone || '';
+            document.getElementById('employeeEmail').value = data.email || '';
+            document.getElementById('employeeAddress').value = data.address || '';
+            document.getElementById('employeeBirthDate').value = data.birthDate || '';
+            document.getElementById('employeeHireDate').value = data.hireDate || '';
+            document.getElementById('employeeDismissalDate').value = data.dismissalDate || '';
+            document.getElementById('employeePassword').value = '';
+            document.getElementById('employeePassword').placeholder = 'Оставьте пустым, чтобы не менять';
+
+            document.getElementById('employeeEditorForm').scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+    </script>
+}

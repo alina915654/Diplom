@@ -1,0 +1,236 @@
+﻿@using System.Security.Claims
+
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+
+    string IsActive(string controller, string? action = null)
+    {
+        
+        var controllerMatches = string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase);
+        var actionMatches = action is null || string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase);
+        return controllerMatches && actionMatches ? "active" : string.Empty;
+    }
+    bool HasAnyRole(params string[] roles)
+    {
+        foreach (var role in roles)
+        {
+            if (User.IsInRole(role))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    var pageTitle = ViewData["Title"]?.ToString();
+    var pageSubtitle = ViewData["Subtitle"]?.ToString();
+
+    var currentUserName = User.Identity?.IsAuthenticated == true
+        ? User.Identity?.Name ?? "Пользователь"
+        : "Гость";
+
+    var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "Без роли";
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(string.IsNullOrWhiteSpace(pageTitle) ? "Счастье есть" : $"{pageTitle} - Счастье есть")</title>
+
+    <link rel="icon" type="image/png" href="~/images/logo.png" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <!-- Декоративные световые пятна фона -->
+    <div class="ambient ambient-left"></div>
+    <div class="ambient ambient-right"></div>
+
+    <!-- Основной layout приложения -->
+    <section id="appView" class="app-view">
+        <!-- Левое боковое меню -->
+        <aside class="sidebar">
+            <!-- Бренд -->
+            <div class="sidebar-brand">
+                <img src="~/images/logo.png" alt="Логотип" class="sidebar-logo" />
+                <div>
+                    <p class="eyebrow">Confectionery Management System</p>
+                    <strong>Система кондитерской</strong>
+                </div>
+            </div>
+
+            <!-- Навигация -->
+                        <nav id="moduleNav" class="module-nav">
+                <a class="nav-link @IsActive("Home", "Index")"
+                   asp-controller="Home"
+                   asp-action="Index">
+                    <i class="bi bi-house-door-fill"></i>
+                    <span>Главная</span>
+                </a>
+
+                @if (HasAnyRole("Администратор", "Кассир"))
+                {
+                    <a class="nav-link @IsActive("Sales", "Index")"
+                       asp-controller="Sales"
+                       asp-action="Index">
+                        <i class="bi bi-receipt-cutoff"></i>
+                        <span>Касса (Заказы)</span>
+                    </a>
+                }
+
+                @if (HasAnyRole("Администратор"))
+                {
+                    <a class="nav-link @IsActive("Employees", "Index")"
+                       asp-controller="Employees"
+                       asp-action="Index">
+                        <i class="bi bi-people-fill"></i>
+                        <span>Сотрудники</span>
+                    </a>
+                }
+
+                @if (HasAnyRole("Администратор", "Менеджер"))
+                {
+                    <a class="nav-link @IsActive("Reports", "Index")"
+                       asp-controller="Reports"
+                       asp-action="Index">
+                        <i class="bi bi-bar-chart-line-fill"></i>
+                        <span>Отчёты</span>
+                    </a>
+                }
+
+                @if (HasAnyRole("Администратор", "Кассир", "Менеджер"))
+                {
+                    <a class="nav-link @IsActive("Shifts", "Index")"
+                       asp-controller="Shifts"
+                       asp-action="Index">
+                        <i class="bi bi-clock-history"></i>
+                        <span>Смены</span>
+                    </a>
+                }
+
+                @if (HasAnyRole("Администратор", "Менеджер"))
+                {
+                    <a class="nav-link @IsActive("Suppliers", "Index")"
+                       asp-controller="Suppliers"
+                       asp-action="Index">
+                        <i class="bi bi-building"></i>
+                        <span>Поставщики</span>
+                    </a>
+
+                    <a class="nav-link @IsActive("Products", "Index")"
+                       asp-controller="Products"
+                       asp-action="Index">
+                        <i class="bi bi-grid-3x3-gap-fill"></i>
+                        <span>Товары</span>
+                    </a>
+
+                    <a class="nav-link @IsActive("PurchaseOrders", "Index")"
+                       asp-controller="PurchaseOrders"
+                       asp-action="Index">
+                        <i class="bi bi-truck-flatbed"></i>
+                        <span>Закупки</span>
+                    </a>
+
+                    <a class="nav-link @IsActive("Warehouse", "Index")"
+                       asp-controller="Warehouse"
+                       asp-action="Index">
+                        <i class="bi bi-box-seam-fill"></i>
+                        <span>Склад</span>
+                    </a>
+                }
+
+                <a class="nav-link @IsActive("Home", "Privacy")"
+                   asp-controller="Home"
+                   asp-action="Privacy">
+                    <i class="bi bi-shield-lock-fill"></i>
+                    <span>Конфиденциальность</span>
+                </a>
+            </nav>
+
+
+            <!-- Блок текущего пользователя -->
+            <div class="sidebar-user">
+                <div>
+                    <p id="currentUserName" class="sidebar-user-name">@currentUserName</p>
+                    <p id="currentUserRole" class="sidebar-user-role">@currentUserRole</p>
+                </div>
+
+                <a id="logoutButton"
+                   class="btn btn-secondary"
+                   asp-controller="Account"
+                   asp-action="Logout">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Выход</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Правая рабочая область -->
+        <main class="workspace">
+            <!-- Верхняя панель -->
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Рабочая область</p>
+                    <h2>@(string.IsNullOrWhiteSpace(pageTitle) ? "Панель управления" : pageTitle)</h2>
+                    <p class="muted">
+                        @(string.IsNullOrWhiteSpace(pageSubtitle)
+                            ? "Учет продаж, сотрудников и складских процессов в одном интерфейсе."
+                            : pageSubtitle)
+                    </p>
+                </div>
+
+                <div class="topbar-actions">
+                    <button type="button" class="btn btn-secondary" onclick="window.location.reload();">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        <span>Обновить страницу</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Контент страницы -->
+            <section class="module-panel">
+                @RenderBody()
+            </section>
+        </main>
+    </section>
+
+    <div id="confirmModalOverlay" class="confirm-modal-overlay" aria-hidden="true">
+        <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+            <div class="confirm-modal__icon">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+
+            <div class="confirm-modal__content">
+                <p id="confirmModalTitle" class="confirm-modal__title">Подтверждение действия</p>
+                <p id="confirmModalMessage" class="confirm-modal__message">
+                    Подтвердите выполнение операции.
+                </p>
+            </div>
+
+            <div class="confirm-modal__actions">
+                <button type="button" class="btn btn-ghost" data-confirm-dismiss>
+                    Отмена
+                </button>
+
+                <button type="button" id="confirmModalAccept" class="btn btn-primary">
+                    Подтвердить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,583 @@
+﻿@model IEnumerable<Diplom.Models.Product>
+
+@{
+    ViewData["Title"] = "Касса";
+    ViewData["Subtitle"] = "Оформление продаж и управление текущим заказом.";
+}
+
+<div class="row mt-3">
+    <div class="col-md-8">
+        <h4 class="mb-3 text-secondary">
+            <i class="bi bi-grid"></i> Меню продукции
+        </h4>
+
+        <div class="row row-cols-1 row-cols-md-3 g-3">
+            @foreach (var product in Model)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0 product-card"
+                         onclick='addToCart(
+                             @product.ProductId,
+                             @Html.Raw(System.Text.Json.JsonSerializer.Serialize(product.NameProduct)),
+                             @product.Price.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                             @product.StockQuantity
+                         )'>
+
+                        <div class="product-card-preview">
+                            <i class="bi bi-cake2 fs-1 text-white"></i>
+                        </div>
+
+                        <div class="card-body p-2 text-center">
+                            <h6 class="card-title mb-1 product-title">@product.NameProduct</h6>
+                            <p class="card-text product-price mb-1">@product.Price.ToString("0.00") ₽</p>
+                            <small class="text-muted">
+                                В наличии:
+                                <span id="stock-@product.ProductId">@product.StockQuantity</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow border-0 order-card">
+            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                <h4 class="fw-bold order-title">
+                    <i class="bi bi-receipt"></i> Текущий заказ
+                </h4>
+            </div>
+
+            <div class="card-body">
+                <ul class="list-group list-group-flush mb-3" id="cart-items" style="max-height: 300px; overflow-y: auto;">
+                    <li class="list-group-item text-center text-muted" id="empty-cart-msg">Корзина пуста</li>
+                </ul>
+
+                <hr />
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Итого:</h5>
+                    <h3 class="mb-0 product-price fw-bold">
+                        <span id="total-price">0.00</span> ₽
+                    </h3>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">Тип выдачи:</label>
+                    <select id="order-type" class="form-select form-select-sm">
+                        <option value="1">В зале</option>
+                        <option value="3">Самовывоз</option>
+                        <option value="2">Доставка</option>
+                    </select>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button id="cashPaymentButton"
+                            type="button"
+                            class="btn btn-success btn-lg fw-bold action-button"
+                            onclick="checkout(1)">
+                        <i class="bi bi-cash"></i> Оплата наличными
+                    </button>
+
+                    <button id="cardPaymentButton"
+                            type="button"
+                            class="btn btn-primary btn-lg fw-bold action-button card-button"
+                            onclick="checkout(2)">
+                        <i class="bi bi-credit-card"></i> Оплата картой
+                    </button>
+
+                    <button id="clearCartButton"
+                            type="button"
+                            class="btn btn-outline-danger btn-sm mt-2 action-button"
+                            onclick="clearCart()">
+                        <i class="bi bi-trash"></i> Очистить чек
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Красивое модальное уведомление -->
+<div id="notifyOverlay"
+     class="notify-overlay"
+     onclick="handleNotifyOverlayClick(event)"
+     aria-hidden="true">
+    <div id="notifyModal" class="notify-modal info" role="dialog" aria-modal="true" aria-labelledby="notifyTitle">
+        <div class="notify-header">
+            <div id="notifyIcon" class="notify-icon">
+                <i class="bi bi-bell-fill"></i>
+            </div>
+
+            <div class="notify-text">
+                <h5 id="notifyTitle" class="notify-title">Уведомление</h5>
+                <p id="notifyMessage" class="notify-message"></p>
+            </div>
+        </div>
+
+        <div class="notify-actions">
+            <button id="notifyCloseButton"
+                    type="button"
+                    class="notify-close-button"
+                    onclick="closeNotify()">
+                Понятно
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .product-card {
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        border-radius: 18px;
+        overflow: hidden;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72));
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+
+    .product-card:hover {
+        transform: translateY(-4px) scale(1.01);
+        border: 1px solid rgba(166, 0, 166, 0.24) !important;
+        box-shadow: 0 18px 34px rgba(108, 0, 108, 0.16);
+    }
+
+    .product-card-preview {
+        height: 120px;
+        background: linear-gradient(135deg, rgba(166, 0, 166, 0.70), rgba(210, 95, 210, 0.72));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .product-title {
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .product-price {
+        color: #A600A6;
+    }
+
+    .order-card {
+        border-radius: 20px;
+        position: sticky;
+        top: 20px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.90), rgba(255, 255, 255, 0.76));
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
+
+    .order-title {
+        color: #A600A6;
+    }
+
+    .card-button {
+        background: linear-gradient(135deg, #7C1F7C, #D25FD2);
+        border-color: #7C1F7C;
+    }
+
+    .card-button:hover,
+    .card-button:focus {
+        background: linear-gradient(135deg, #6C006C, #D235D2);
+        border-color: #6C006C;
+    }
+
+    body.notify-open {
+        overflow: hidden;
+    }
+
+    .notify-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(17, 6, 22, 0.46);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+        z-index: 3000;
+    }
+
+    .notify-overlay.show {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    .notify-modal {
+        width: min(460px, 100%);
+        border-radius: 26px;
+        padding: 22px;
+        color: #2d1833;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
+        border: 1px solid rgba(255, 255, 255, 0.42);
+        box-shadow:
+            0 24px 60px rgba(108, 0, 108, 0.24),
+            inset 0 1px 0 rgba(255, 255, 255, 0.30);
+        transform: translateY(18px) scale(0.98);
+        transition: transform 0.24s ease;
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+    }
+
+    .notify-overlay.show .notify-modal {
+        transform: translateY(0) scale(1);
+    }
+
+    .notify-header {
+        display: grid;
+        grid-template-columns: 62px 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    .notify-icon {
+        width: 62px;
+        height: 62px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        color: #fff;
+        box-shadow: 0 12px 30px rgba(108, 0, 108, 0.18);
+    }
+
+    .notify-modal.success .notify-icon {
+        background: linear-gradient(135deg, #6C006C, #A600A6);
+    }
+
+    .notify-modal.error .notify-icon {
+        background: linear-gradient(135deg, #7C1F7C, #D235D2);
+    }
+
+    .notify-modal.warning .notify-icon {
+        background: linear-gradient(135deg, #A600A6, #D25FD2);
+    }
+
+    .notify-modal.info .notify-icon {
+        background: linear-gradient(135deg, #7C1F7C, #D25FD2);
+    }
+
+    .notify-title {
+        margin: 2px 0 8px;
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #2b1631;
+    }
+
+    .notify-message {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.55;
+        color: #5b4562;
+        white-space: pre-line;
+    }
+
+    .notify-actions {
+        margin-top: 22px;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .notify-close-button {
+        min-width: 132px;
+        border: 0;
+        border-radius: 16px;
+        padding: 12px 18px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, #A600A6, #D235D2);
+        box-shadow: 0 12px 24px rgba(166, 0, 166, 0.24);
+        transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+    }
+
+    .notify-close-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 26px rgba(166, 0, 166, 0.28);
+    }
+
+    .notify-close-button:active {
+        transform: translateY(0);
+    }
+
+    @@media (max-width: 576px) {
+        .notify-modal {
+            padding: 18px;
+            border-radius: 22px;
+        }
+
+        .notify-header {
+            grid-template-columns: 52px 1fr;
+            gap: 12px;
+        }
+
+        .notify-icon {
+            width: 52px;
+            height: 52px;
+            font-size: 22px;
+            border-radius: 16px;
+        }
+
+        .notify-title {
+            font-size: 20px;
+        }
+
+        .notify-close-button {
+            width: 100%;
+        }
+
+        .notify-actions {
+            justify-content: stretch;
+        }
+    }
+</style>
+
+@section Scripts {
+    <script>
+        let cart = [];
+        let notifyCloseAction = null;
+
+        function getNotifyConfig(type) {
+            const config = {
+                success: {
+                    title: 'Успешно',
+                    icon: 'bi-check-circle-fill',
+                    className: 'success'
+                },
+                error: {
+                    title: 'Ошибка',
+                    icon: 'bi-x-octagon-fill',
+                    className: 'error'
+                },
+                warning: {
+                    title: 'Внимание',
+                    icon: 'bi-exclamation-triangle-fill',
+                    className: 'warning'
+                },
+                info: {
+                    title: 'Уведомление',
+                    icon: 'bi-bell-fill',
+                    className: 'info'
+                }
+            };
+
+            return config[type] ?? config.info;
+        }
+
+        function showNotify(message, type = 'info', title = null, onClose = null) {
+            const overlay = document.getElementById('notifyOverlay');
+            const modal = document.getElementById('notifyModal');
+            const icon = document.getElementById('notifyIcon');
+            const titleElement = document.getElementById('notifyTitle');
+            const messageElement = document.getElementById('notifyMessage');
+            const closeButton = document.getElementById('notifyCloseButton');
+
+            const config = getNotifyConfig(type);
+
+            notifyCloseAction = typeof onClose === 'function' ? onClose : null;
+
+            modal.className = `notify-modal ${config.className}`;
+            icon.innerHTML = `<i class="bi ${config.icon}"></i>`;
+            titleElement.textContent = title || config.title;
+            messageElement.textContent = message;
+
+            overlay.classList.add('show');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('notify-open');
+
+            window.setTimeout(() => closeButton.focus(), 50);
+        }
+
+        function closeNotify() {
+            const overlay = document.getElementById('notifyOverlay');
+
+            if (!overlay.classList.contains('show')) {
+                return;
+            }
+
+            overlay.classList.remove('show');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('notify-open');
+
+            const callback = notifyCloseAction;
+            notifyCloseAction = null;
+
+            if (typeof callback === 'function') {
+                window.setTimeout(() => callback(), 180);
+            }
+        }
+
+        function handleNotifyOverlayClick(event) {
+            if (event.target.id === 'notifyOverlay') {
+                closeNotify();
+            }
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeNotify();
+            }
+        });
+
+        function setActionButtonsDisabled(disabled) {
+            const ids = ['cashPaymentButton', 'cardPaymentButton', 'clearCartButton'];
+
+            ids.forEach(id => {
+                const button = document.getElementById(id);
+                if (button) {
+                    button.disabled = disabled;
+                }
+            });
+
+            document.querySelectorAll('#cart-items button').forEach(button => {
+                button.disabled = disabled;
+            });
+        }
+
+        function addToCart(id, name, price, maxStock) {
+            id = Number.parseInt(id, 10);
+            price = Number.parseFloat(price);
+            maxStock = Number.parseInt(maxStock, 10);
+
+            const existingItem = cart.find(i => i.productId === id);
+
+            if (existingItem) {
+                if (existingItem.quantity < maxStock) {
+                    existingItem.quantity++;
+                } else {
+                    showNotify('Недостаточно товара на складе.', 'warning', 'Недостаточно остатка');
+                    return;
+                }
+            } else {
+                cart.push({
+                    productId: id,
+                    name: name,
+                    price: price,
+                    quantity: 1
+                });
+            }
+
+            updateCartUI();
+        }
+
+        function updateCartUI() {
+            const cartList = document.getElementById('cart-items');
+            let total = 0;
+
+            cartList.innerHTML = '';
+
+            if (cart.length === 0) {
+                cartList.innerHTML = '<li class="list-group-item text-center text-muted">Корзина пуста</li>';
+            } else {
+                cart.forEach((item, index) => {
+                    total += item.price * item.quantity;
+
+                    cartList.innerHTML += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <div>
+                                <h6 class="my-0" style="font-size: 14px;">${item.name}</h6>
+                                <small class="text-muted">${item.quantity} шт. x ${item.price.toFixed(2)} ₽</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="text-dark fw-bold">${(item.quantity * item.price).toFixed(2)} ₽</span>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger py-0 px-1"
+                                        onclick="removeFromCart(${index})">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </li>
+                    `;
+                });
+            }
+
+            document.getElementById('total-price').innerText = total.toFixed(2);
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCartUI();
+        }
+
+        function clearCart() {
+            cart = [];
+            updateCartUI();
+        }
+
+        async function checkout(paymentMethodId) {
+            if (cart.length === 0) {
+                showNotify('Корзина пуста. Добавьте товары для продажи.', 'warning', 'Пустая корзина');
+                return;
+            }
+
+            const typeId = Number.parseInt(document.getElementById('order-type').value, 10);
+
+            const orderData = {
+                PaymentMethod: paymentMethodId,
+                TypeId: typeId,
+                Items: cart.map(item => ({
+                    ProductId: item.productId,
+                    Quantity: item.quantity,
+                    Price: item.price
+                }))
+            };
+
+            try {
+                setActionButtonsDisabled(true);
+
+                const response = await fetch('/Sales/CreateOrder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(orderData)
+                });
+
+                let result = null;
+
+                try {
+                    result = await response.json();
+                } catch {
+                    result = null;
+                }
+
+                if (response.ok && result?.success) {
+                    showNotify(
+                        `Заказ успешно оформлен.\nНомер чека: ${result.checkNumber}`,
+                        'success',
+                        'Продажа выполнена',
+                        () => {
+                            clearCart();
+                            location.reload();
+                        });
+                } else {
+                    setActionButtonsDisabled(false);
+
+                    showNotify(
+                        `Ошибка оформления: ${result?.message || 'Неизвестная ошибка сервера.'}`,
+                        'error',
+                        'Не удалось оформить заказ');
+                }
+            } catch (error) {
+                console.error('Ошибка сети:', error);
+                setActionButtonsDisabled(false);
+
+                showNotify(
+                    'Произошел сбой при связи с сервером.',
+                    'error',
+                    'Ошибка соединения');
+            }
+        }
+    </script>
+}

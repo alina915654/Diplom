@@ -1,0 +1,1164 @@
+﻿@model Diplom.ViewModels.HomeDashboardViewModel
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "Главная";
+
+    string GetStatusClass(string? statusName)
+    {
+        var normalized = (statusName ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalized.Contains("заверш") || normalized.Contains("completed") || normalized.Contains("выдан"))
+        {
+            return "status-done";
+        }
+
+        if (normalized.Contains("нов") || normalized.Contains("new"))
+        {
+            return "status-new";
+        }
+
+        if (normalized.Contains("достав") || normalized.Contains("в пути") || normalized.Contains("обработ") || normalized.Contains("processing"))
+        {
+            return "status-progress";
+        }
+
+        if (normalized.Contains("отмен") || normalized.Contains("cancel"))
+        {
+            return "status-cancel";
+        }
+
+        return "status-neutral";
+    }
+}
+
+@section Styles {
+    <style>
+        .dashboard-shell {
+            display: grid;
+            gap: 18px;
+        }
+
+        .reveal-card {
+            opacity: 0;
+            transform: translateY(18px) scale(0.98);
+            animation: dashboard-reveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation-delay: calc(var(--delay, 0) * 90ms);
+        }
+
+        .dashboard-hero {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.90), rgba(248, 229, 255, 0.74));
+        }
+
+        .dashboard-hero::before {
+            content: "";
+            position: absolute;
+            top: -140px;
+            right: -120px;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(210, 95, 210, 0.28), transparent 68%);
+            animation: hero-glow 8s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .dashboard-hero::after {
+            content: "";
+            position: absolute;
+            bottom: -120px;
+            left: -110px;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(124, 31, 124, 0.22), transparent 68%);
+            animation: hero-glow 10s ease-in-out infinite reverse;
+            pointer-events: none;
+        }
+
+        .dashboard-header-card {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 18px;
+            align-items: center;
+        }
+
+        .dashboard-logo {
+            width: 84px;
+            height: 84px;
+            object-fit: contain;
+            border-radius: 24px;
+            padding: 12px;
+            background: linear-gradient(135deg, rgba(166, 0, 166, 0.16), rgba(210, 95, 210, 0.24));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        }
+
+        .dashboard-role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(135deg, #7C1F7C, #D25FD2);
+            box-shadow: 0 10px 22px rgba(108, 0, 108, 0.18);
+        }
+
+        .dashboard-live-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .dashboard-live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 12px;
+            border-radius: 999px;
+            color: #5f295f;
+            font-size: 13px;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.56);
+            border: 1px solid rgba(210, 95, 210, 0.18);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+        }
+
+        .dashboard-live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #D235D2;
+            box-shadow: 0 0 0 0 rgba(210, 53, 210, 0.5);
+            animation: pulse-dot 1.8s ease-in-out infinite;
+        }
+
+        .dashboard-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #6C006C;
+            background: rgba(210, 95, 210, 0.12);
+            border: 1px solid rgba(210, 95, 210, 0.18);
+        }
+
+        .dashboard-empty {
+            padding: 18px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px dashed rgba(210, 95, 210, 0.24);
+            color: var(--muted);
+        }
+
+        .hello-card-text {
+            max-width: 820px;
+        }
+
+        .metrics-grid .metric-card {
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .metrics-grid .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 22px 44px rgba(108, 0, 108, 0.14);
+        }
+
+        .metrics-grid .metric-card::after {
+            content: "";
+            position: absolute;
+            right: -42px;
+            bottom: -52px;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(210, 95, 210, 0.14), transparent 70%);
+            pointer-events: none;
+        }
+
+        .metric-card-strong {
+            background: linear-gradient(135deg, rgba(166, 0, 166, 0.94), rgba(210, 95, 210, 0.88));
+            border-color: rgba(255, 255, 255, 0.16);
+        }
+
+        .metric-card-strong .metric-title,
+        .metric-card-strong .metric-subtitle,
+        .metric-card-strong .metric-value {
+            color: #fff;
+        }
+
+        .metric-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.16);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        }
+
+        .metric-card:not(.metric-card-strong) .metric-icon {
+            color: var(--primary-dark);
+            background: rgba(210, 95, 210, 0.12);
+        }
+
+        .metric-aux {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 112px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .status-new {
+            color: #6C006C;
+            background: rgba(210, 95, 210, 0.14);
+            border-color: rgba(210, 95, 210, 0.24);
+        }
+
+        .status-progress {
+            color: #7C1F7C;
+            background: rgba(166, 0, 166, 0.12);
+            border-color: rgba(166, 0, 166, 0.22);
+        }
+
+        .status-done {
+            color: #1e6b50;
+            background: rgba(76, 175, 80, 0.12);
+            border-color: rgba(76, 175, 80, 0.22);
+        }
+
+        .status-cancel {
+            color: #a61b5b;
+            background: rgba(255, 82, 82, 0.12);
+            border-color: rgba(255, 82, 82, 0.22);
+        }
+
+        .status-neutral {
+            color: #5d5164;
+            background: rgba(120, 120, 120, 0.10);
+            border-color: rgba(120, 120, 120, 0.18);
+        }
+
+        .day-chart {
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(92px, 1fr);
+            gap: 14px;
+            align-items: end;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .day-chart-column {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .day-chart-value {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+
+        .day-chart-track {
+            height: 220px;
+            border-radius: 24px;
+            background: linear-gradient(180deg, rgba(210, 95, 210, 0.08), rgba(166, 0, 166, 0.16));
+            border: 1px solid rgba(210, 95, 210, 0.12);
+            display: flex;
+            align-items: flex-end;
+            padding: 8px;
+        }
+
+        .day-chart-fill {
+            width: 100%;
+            min-height: 8px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #D25FD2 0%, #A600A6 100%);
+            box-shadow: 0 10px 18px rgba(166, 0, 166, 0.18);
+            transform-origin: bottom;
+            transform: scaleY(0);
+            animation: grow-day-bar 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation-delay: calc(180ms + var(--order, 0) * 80ms);
+        }
+
+        .day-chart-column:nth-child(2n) .day-chart-fill {
+            background: linear-gradient(180deg, #D235D2 0%, #7C1F7C 100%);
+        }
+
+        .day-chart-column:nth-child(3n) .day-chart-fill {
+            background: linear-gradient(180deg, #C85AE6 0%, #6C006C 100%);
+        }
+
+        .day-chart-label {
+            text-align: center;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .day-chart small {
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .type-chart-list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .type-chart-row {
+            display: grid;
+            gap: 8px;
+        }
+
+        .type-chart-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .type-chart-header strong:last-child {
+            color: var(--primary-dark);
+        }
+
+        .type-chart-line {
+            width: 100%;
+            height: 14px;
+            border-radius: 999px;
+            background: rgba(210, 95, 210, 0.12);
+            overflow: hidden;
+        }
+
+        .type-chart-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #A600A6 0%, #D25FD2 100%);
+            transform-origin: left;
+            transform: scaleX(0);
+            animation: grow-type-bar 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation-delay: calc(200ms + var(--order, 0) * 90ms);
+        }
+
+        .type-chart-row:nth-child(2n) .type-chart-fill {
+            background: linear-gradient(90deg, #7C1F7C 0%, #D235D2 100%);
+        }
+
+        .type-chart-row:nth-child(3n) .type-chart-fill {
+            background: linear-gradient(90deg, #6C006C 0%, #C85AE6 100%);
+        }
+
+        .type-chart-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--muted);
+        }
+
+        .spotlight-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .spotlight-card::before {
+            content: "";
+            position: absolute;
+            inset: auto -40px -40px auto;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(210, 95, 210, 0.12), transparent 72%);
+            pointer-events: none;
+        }
+
+        .employee-spotlight {
+            display: grid;
+            gap: 14px;
+        }
+
+        .employee-highlight-name {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--primary-dark);
+            line-height: 1.1;
+        }
+
+        .employee-highlight-role {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .mini-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .mini-kpi-card {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.48);
+            border: 1px solid rgba(210, 95, 210, 0.16);
+        }
+
+        .mini-kpi-card small {
+            display: block;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .mini-kpi-card strong {
+            color: var(--primary-dark);
+            font-size: 16px;
+        }
+
+        .alert-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .alert-item {
+            display: grid;
+            gap: 6px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.48);
+            border: 1px solid rgba(210, 95, 210, 0.16);
+        }
+
+        .alert-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .alert-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #7C1F7C;
+            background: rgba(210, 95, 210, 0.14);
+            border: 1px solid rgba(210, 95, 210, 0.18);
+        }
+
+        .alert-pill.critical {
+            color: #fff;
+            background: linear-gradient(135deg, #A600A6, #D235D2);
+            border-color: transparent;
+        }
+
+        .warning-item {
+            display: grid;
+            gap: 4px;
+        }
+
+        .warning-item strong {
+            color: var(--primary-dark);
+        }
+
+        .warning-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .danger-text {
+            color: #B0005C;
+            font-weight: 800;
+        }
+
+        .soft-kpi {
+            display: grid;
+            gap: 10px;
+        }
+
+        .rank-list .rank-item,
+        .data-table tbody tr {
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .rank-list .rank-item:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(210, 95, 210, 0.08);
+        }
+
+                @@keyframes dashboard-reveal {
+            from {
+                opacity: 0;
+                transform: translateY(18px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @@keyframes pulse-dot {
+            0% {
+                box-shadow: 0 0 0 0 rgba(210, 53, 210, 0.45);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(210, 53, 210, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(210, 53, 210, 0);
+            }
+        }
+
+        @@keyframes hero-glow {
+            0% {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+            50% {
+                transform: translate3d(-10px, 12px, 0) scale(1.06);
+            }
+            100% {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+        }
+
+        @@keyframes grow-day-bar {
+            from {
+                transform: scaleY(0);
+            }
+            to {
+                transform: scaleY(1);
+            }
+        }
+
+        @@keyframes grow-type-bar {
+            from {
+                transform: scaleX(0);
+            }
+            to {
+                transform: scaleX(1);
+            }
+        }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .reveal-card,
+            .dashboard-live-dot,
+            .dashboard-hero::before,
+            .dashboard-hero::after,
+            .day-chart-fill,
+            .type-chart-fill {
+                animation: none !important;
+                opacity: 1 !important;
+                transform: none !important;
+            }
+        }
+
+        @@media (max-width: 960px) {
+            .mini-kpi-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @@media (max-width: 720px) {
+            .dashboard-header-card {
+                grid-template-columns: 1fr;
+            }
+
+            .day-chart {
+                grid-auto-columns: minmax(76px, 1fr);
+            }
+
+            .mini-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+    </style>
+}
+
+<div class="dashboard-shell">
+    @if (!Model.IsAdministrator)
+    {
+        <article class="surface dashboard-hero reveal-card" style="--delay:0;">
+            <div class="dashboard-header-card">
+                <img src="~/images/logo.png" alt="Логотип" class="dashboard-logo" />
+
+                <div class="hello-card-text">
+                    <p class="eyebrow">Добро пожаловать</p>
+                    <h3 style="margin: 0 0 10px;">@Model.CurrentUserName</h3>
+
+                    <div class="dashboard-role-badge">
+                        <i class="bi bi-person-badge-fill"></i>
+                        <span>@Model.CurrentUserRole</span>
+                    </div>
+
+                    <p class="muted" style="margin: 16px 0 0;">
+                        Для вашей роли выводится рабочее пространство без расширенной аналитики.
+                        Используйте боковое меню для перехода к нужным разделам системы.
+                    </p>
+                </div>
+            </div>
+        </article>
+    }
+    else
+    {
+        <article class="surface dashboard-hero reveal-card" style="--delay:0;">
+            <div class="dashboard-header-card">
+                <img src="~/images/logo.png" alt="Логотип" class="dashboard-logo" />
+
+                <div class="hello-card-text">
+                    <p class="eyebrow">Панель администратора</p>
+                    <h3 style="margin: 0 0 10px;">@Model.CurrentUserName</h3>
+
+                    <div class="dashboard-role-badge">
+                        <i class="bi bi-shield-lock-fill"></i>
+                        <span>@Model.CurrentUserRole</span>
+                    </div>
+
+                    <p class="muted" style="margin: 16px 0 0;">
+                        Здесь выводится ключевая аналитика по продажам, складу, доставке,
+                        закупкам и эффективности сотрудников.
+                    </p>
+
+                    <div class="dashboard-live-strip">
+                        <span class="dashboard-live-pill">
+                            <span class="dashboard-live-dot"></span>
+                            Онлайн-показатели
+                        </span>
+
+                        <span class="dashboard-live-pill">
+                            Средний чек сегодня:
+                            <strong>@Model.AverageCheckToday.ToString("N2") ₽</strong>
+                        </span>
+
+                        <span class="dashboard-live-pill">
+                            Списано за месяц:
+                            <strong>@Model.MonthlyWasteQuantity</strong>
+                        </span>
+
+                        <span class="dashboard-live-pill">
+                            Срок хранения до 7 дней:
+                            <strong>@Model.ExpiringItemsCount</strong>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        <div class="metrics-grid">
+            <article class="metric-card metric-card-strong reveal-card" style="--delay:1;">
+                <div class="metric-icon"><i class="bi bi-cash-stack"></i></div>
+                <p class="metric-title">Выручка сегодня</p>
+                <p class="metric-value">
+                    <span data-counter="currency" data-value="@Model.RevenueToday.ToString(CultureInfo.InvariantCulture)">0,00 ₽</span>
+                </p>
+                <p class="metric-subtitle">@Model.OrdersToday заказов за текущий день</p>
+            </article>
+
+            <article class="metric-card metric-card-strong reveal-card" style="--delay:2;">
+                <div class="metric-icon"><i class="bi bi-calendar-month"></i></div>
+                <p class="metric-title">Выручка за месяц</p>
+                <p class="metric-value">
+                    <span data-counter="currency" data-value="@Model.RevenueThisMonth.ToString(CultureInfo.InvariantCulture)">0,00 ₽</span>
+                </p>
+                <p class="metric-subtitle">@Model.OrdersThisMonth заказов с начала месяца</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:3;">
+                <div class="metric-icon"><i class="bi bi-receipt"></i></div>
+                <p class="metric-title">Средний чек сегодня</p>
+                <p class="metric-value">
+                    <span data-counter="currency" data-value="@Model.AverageCheckToday.ToString(CultureInfo.InvariantCulture)">0,00 ₽</span>
+                </p>
+                <p class="metric-subtitle">Средняя сумма одного заказа</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:4;">
+                <div class="metric-icon"><i class="bi bi-people-fill"></i></div>
+                <p class="metric-title">Сотрудники</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.TotalEmployees">0</span>
+                </p>
+                <p class="metric-subtitle">Пользователей в системе</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:5;">
+                <div class="metric-icon"><i class="bi bi-person-hearts"></i></div>
+                <p class="metric-title">Клиенты</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.TotalClients">0</span>
+                </p>
+                <p class="metric-subtitle">Всего клиентских карточек</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:6;">
+                <div class="metric-icon"><i class="bi bi-cake2-fill"></i></div>
+                <p class="metric-title">Активные товары</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.ActiveProducts">0</span>
+                </p>
+                <p class="metric-subtitle">Доступны к продаже</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:7;">
+                <div class="metric-icon"><i class="bi bi-exclamation-diamond-fill"></i></div>
+                <p class="metric-title">Низкие остатки</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.LowStockProducts">0</span>
+                </p>
+                <p class="metric-subtitle">Товаров требуют внимания</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:8;">
+                <div class="metric-icon"><i class="bi bi-hourglass-split"></i></div>
+                <p class="metric-title">Скоро истекают</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.ExpiringItemsCount">0</span>
+                </p>
+                <p class="metric-subtitle">Позиций со сроком до 7 дней</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:9;">
+                <div class="metric-icon"><i class="bi bi-clock-history"></i></div>
+                <p class="metric-title">Открытые смены</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.OpenShifts">0</span>
+                </p>
+                <p class="metric-subtitle">Смены без закрытия</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:10;">
+                <div class="metric-icon"><i class="bi bi-truck"></i></div>
+                <p class="metric-title">Доставки в работе</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.PendingDeliveries">0</span>
+                </p>
+                <p class="metric-subtitle">Не завершены</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:11;">
+                <div class="metric-icon"><i class="bi bi-box-seam-fill"></i></div>
+                <p class="metric-title">Закупки в процессе</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.PurchaseOrdersInProgress">0</span>
+                </p>
+                <p class="metric-subtitle">Ожидают поставки или приемки</p>
+            </article>
+
+            <article class="metric-card reveal-card" style="--delay:12;">
+                <div class="metric-icon"><i class="bi bi-trash3-fill"></i></div>
+                <p class="metric-title">Списания за месяц</p>
+                <p class="metric-value">
+                    <span data-counter="int" data-value="@Model.MonthlyWasteQuantity">0</span>
+                </p>
+                <p class="metric-subtitle">Количество единиц брака</p>
+            </article>
+        </div>
+
+        <div class="two-column">
+            <article class="surface reveal-card" style="--delay:13;">
+                <div class="surface-header">
+                    <h3>Продажи за последние 7 дней</h3>
+                    <span class="dashboard-badge">Динамика</span>
+                </div>
+
+                @if (Model.DailySalesChart.Count == 0)
+                {
+                    <div class="dashboard-empty">Нет данных по продажам за последние дни.</div>
+                }
+                else
+                {
+                    <div class="day-chart">
+                        @for (var i = 0; i < Model.DailySalesChart.Count; i++)
+                        {
+                            var item = Model.DailySalesChart[i];
+
+                            <div class="day-chart-column">
+                                <div class="day-chart-value">@item.Revenue.ToString("N0") ₽</div>
+
+                                <div class="day-chart-track">
+                                    <div class="day-chart-fill"
+                                         title="@($"{item.DayLabel}: {item.Revenue:N2} ₽, заказов: {item.OrdersCount}")"
+                                         style="@($"--order:{i}; height:{item.PercentOfMax.ToString("0.##", CultureInfo.InvariantCulture)}%;")">
+                                    </div>
+                                </div>
+
+                                <div class="day-chart-label">@item.DayLabel</div>
+                                <small>@item.OrdersCount заказов</small>
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+
+            <article class="surface reveal-card" style="--delay:14;">
+                <div class="surface-header">
+                    <h3>Структура продаж за месяц</h3>
+                    <span class="dashboard-badge">По типам</span>
+                </div>
+
+                @if (Model.SalesByType.Count == 0)
+                {
+                    <div class="dashboard-empty">Нет данных по типам продаж за текущий месяц.</div>
+                }
+                else
+                {
+                    <div class="type-chart-list">
+                        @for (var i = 0; i < Model.SalesByType.Count; i++)
+                        {
+                            var item = Model.SalesByType[i];
+
+                            <div class="type-chart-row">
+                                <div class="type-chart-header">
+                                    <strong>@item.TypeName</strong>
+                                    <strong>@item.Revenue.ToString("N2") ₽</strong>
+                                </div>
+
+                                <div class="type-chart-line">
+                                    <div class="type-chart-fill"
+                                         style="@($"--order:{i}; width:{item.PercentOfTotal.ToString("0.##", CultureInfo.InvariantCulture)}%;")">
+                                    </div>
+                                </div>
+
+                                <div class="type-chart-meta">
+                                    <small>@item.OrdersCount заказов</small>
+                                    <small>@item.PercentOfTotal.ToString("0.#")%</small>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+        </div>
+
+        <div class="three-column">
+            <article class="surface spotlight-card reveal-card" style="--delay:15;">
+                <div class="surface-header">
+                    <h3>Лучший сотрудник</h3>
+                    <span class="dashboard-badge">Лидер месяца</span>
+                </div>
+
+                <div class="employee-spotlight">
+                    <div>
+                        <div class="employee-highlight-name">@Model.BestEmployeeName</div>
+                        <div class="employee-highlight-role">@Model.BestEmployeeRole</div>
+                    </div>
+
+                    <div class="mini-kpi-grid">
+                        <div class="mini-kpi-card">
+                            <small>Продаж</small>
+                            <strong>@Model.BestEmployeeSalesCount</strong>
+                        </div>
+
+                        <div class="mini-kpi-card">
+                            <small>Выручка</small>
+                            <strong>@Model.BestEmployeeRevenue.ToString("N2") ₽</strong>
+                        </div>
+                    </div>
+                </div>
+            </article>
+
+            <article class="surface spotlight-card reveal-card" style="--delay:16;">
+                <div class="surface-header">
+                    <h3>Истекающий срок хранения</h3>
+                    <span class="dashboard-badge">До 7 дней</span>
+                </div>
+
+                @if (Model.ExpiringItems.Count == 0)
+                {
+                    <div class="dashboard-empty">Нет товаров с истекающим сроком хранения.</div>
+                }
+                else
+                {
+                    <div class="alert-list">
+                        @foreach (var item in Model.ExpiringItems)
+                        {
+                            <div class="alert-item">
+                                <div class="alert-row">
+                                    <strong>@item.ProductName</strong>
+                                    <span class="alert-pill @(item.DaysLeft <= 2 ? "critical" : string.Empty)">
+                                        @(item.DaysLeft == 0 ? "сегодня" : $"через {item.DaysLeft} дн.")
+                                    </span>
+                                </div>
+
+                                <small class="muted">Остаток: @item.StockLevel</small>
+                                <small class="muted">Годен до @item.ExpirationDate.ToString("dd.MM.yyyy")</small>
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+
+            <article class="surface spotlight-card reveal-card" style="--delay:17;">
+                <div class="surface-header">
+                    <h3>Низкие остатки</h3>
+                    <span class="dashboard-badge">Контроль склада</span>
+                </div>
+
+                @if (Model.LowStockItems.Count == 0)
+                {
+                    <div class="dashboard-empty">Товаров с низким остатком нет.</div>
+                }
+                else
+                {
+                    <div class="rank-list soft-kpi">
+                        @foreach (var item in Model.LowStockItems)
+                        {
+                            <div class="rank-item warning-item">
+                                <strong>@item.ProductName</strong>
+                                <small>@item.CategoryName</small>
+
+                                <div class="warning-meta">
+                                    <span>Остаток: <span class="danger-text">@item.StockQuantity</span></span>
+                                    <span>Порог: @item.Threshold</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+        </div>
+
+        <div class="two-column">
+            <article class="surface reveal-card" style="--delay:18;">
+                <div class="surface-header">
+                    <h3>Последние продажи</h3>
+                    <span class="dashboard-badge">Онлайн-сводка</span>
+                </div>
+
+                @if (Model.RecentSales.Count == 0)
+                {
+                    <div class="dashboard-empty">Продаж пока нет.</div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="data-table compact-table">
+                            <thead>
+                                <tr>
+                                    <th>Чек</th>
+                                    <th>Дата</th>
+                                    <th>Клиент</th>
+                                    <th>Кассир</th>
+                                    <th>Статус</th>
+                                    <th>Сумма</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var sale in Model.RecentSales)
+                                {
+                                    <tr>
+                                        <td>@sale.CheckNumber</td>
+                                        <td>@sale.SaleDate.ToString("dd.MM.yyyy HH:mm")</td>
+                                        <td>@sale.ClientName</td>
+                                        <td>@sale.CashierName</td>
+                                        <td>
+                                            <span class="status-pill @GetStatusClass(sale.StatusName)">
+                                                @sale.StatusName
+                                            </span>
+                                        </td>
+                                        <td>@sale.FinalAmount.ToString("N2") ₽</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </article>
+
+            <article class="surface reveal-card" style="--delay:19;">
+                <div class="surface-header">
+                    <h3>Топ товаров</h3>
+                    <span class="dashboard-badge">Продажи</span>
+                </div>
+
+                @if (Model.TopProducts.Count == 0)
+                {
+                    <div class="dashboard-empty">Нет данных по популярности товаров.</div>
+                }
+                else
+                {
+                    <div class="rank-list soft-kpi">
+                        @foreach (var item in Model.TopProducts)
+                        {
+                            <div class="rank-item">
+                                <div>
+                                    <strong>@item.ProductName</strong>
+                                    <small>Продаж: @item.SalesCount</small>
+                                </div>
+                                <strong>@item.QuantitySold шт.</strong>
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+        </div>
+
+        <div class="two-column">
+            <article class="surface reveal-card" style="--delay:20;">
+                <div class="surface-header">
+                    <h3>Баланс по категориям</h3>
+                    <span class="dashboard-badge">Склад</span>
+                </div>
+
+                @if (Model.WarehouseBalances.Count == 0)
+                {
+                    <div class="dashboard-empty">Нет данных по остаткам склада.</div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="data-table compact-table">
+                            <thead>
+                                <tr>
+                                    <th>Категория</th>
+                                    <th>Остаток</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model.WarehouseBalances)
+                                {
+                                    <tr>
+                                        <td>@item.CategoryName</td>
+                                        <td>@item.TotalStock</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </article>
+
+            <article class="surface reveal-card" style="--delay:21;">
+                <div class="surface-header">
+                    <h3>Эффективность сотрудников</h3>
+                    <span class="dashboard-badge">KPI</span>
+                </div>
+
+                @if (Model.EmployeePerformance.Count == 0)
+                {
+                    <div class="dashboard-empty">Пока нет статистики по сотрудникам.</div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="data-table compact-table">
+                            <thead>
+                                <tr>
+                                    <th>Сотрудник</th>
+                                    <th>Роль</th>
+                                    <th>Продаж</th>
+                                    <th>Выручка</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in Model.EmployeePerformance)
+                                {
+                                    <tr>
+                                        <td>@user.FullName</td>
+                                        <td>@user.RoleName</td>
+                                        <td>@user.SalesCount</td>
+                                        <td>@user.TotalAmount.ToString("N2") ₽</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </article>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const counters = document.querySelectorAll('[data-counter]');
+
+            const intFormatter = new Intl.NumberFormat('ru-RU', {
+                maximumFractionDigits: 0
+            });
+
+            const currencyFormatter = new Intl.NumberFormat('ru-RU', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+
+            function formatValue(value, type) {
+                if (type === 'currency') {
+                    return `${currencyFormatter.format(value)} ₽`;
+                }
+
+                return intFormatter.format(Math.round(value));
+            }
+
+            counters.forEach((element, index) => {
+                const target = Number(element.dataset.value || '0');
+                const type = element.dataset.counter || 'int';
+
+                if (prefersReducedMotion) {
+                    element.textContent = formatValue(target, type);
+                    return;
+                }
+
+                const duration = 950 + index * 45;
+                const startTime = performance.now();
+
+                function update(now) {
+                    const progress = Math.min((now - startTime) / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const currentValue = target * eased;
+
+                    element.textContent = formatValue(currentValue, type);
+
+                    if (progress < 1) {
+                        requestAnimationFrame(update);
+                    } else {
+                        element.textContent = formatValue(target, type);
+                    }
+                }
+
+                requestAnimationFrame(update);
+            });
+        });
+    </script>
+}

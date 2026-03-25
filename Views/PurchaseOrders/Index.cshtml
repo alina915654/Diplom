@@ -1,0 +1,702 @@
+@using System.Linq
+@using System.Text.Encodings.Web
+@using System.Text.Json
+@model Diplom.ViewModels.PurchaseOrdersIndexViewModel
+
+@{
+    var isEditMode = Model.Editor.Poid.HasValue;
+}
+
+@section Styles {
+    <style>
+        .purchase-detail-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .purchase-detail-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(100px, 0.7fr)) auto;
+            gap: 10px;
+            align-items: end;
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(210, 95, 210, 0.14);
+        }
+
+        .purchase-detail-grid {
+            display: grid;
+            gap: 6px;
+        }
+
+        .purchase-detail-grid label {
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .purchase-table-meta {
+            display: grid;
+            gap: 4px;
+        }
+
+        .purchase-table-meta strong {
+            line-height: 1.2;
+        }
+
+        .purchase-table-meta small {
+            color: var(--muted);
+        }
+
+        .purchase-summary-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .purchase-summary-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(210, 95, 210, 0.16);
+            background: rgba(255, 255, 255, 0.52);
+        }
+
+        .purchase-summary-card strong {
+            display: block;
+            font-size: 18px;
+            color: var(--primary-dark);
+        }
+
+        .purchase-summary-card small {
+            color: var(--muted);
+        }
+
+        .purchase-status-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 110px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #7C1F7C;
+            background: rgba(210, 95, 210, 0.14);
+            border: 1px solid rgba(210, 95, 210, 0.18);
+        }
+
+        .purchase-status-chip--done {
+            color: #1f6f4f;
+            background: rgba(93, 209, 143, 0.12);
+            border-color: rgba(93, 209, 143, 0.22);
+        }
+
+        .purchase-status-chip--cancelled {
+            color: #8d1b4d;
+            background: rgba(232, 96, 154, 0.16);
+            border-color: rgba(232, 96, 154, 0.24);
+        }
+
+        @@media (max-width: 960px) {
+            .purchase-detail-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+<template id="purchaseDetailRowTemplate">
+    <div class="purchase-detail-row" data-detail-row>
+        <label>
+            Ингредиент
+            <select data-name="IngredientId">
+                <option value="">Выберите ингредиент</option>
+                @foreach (var ingredient in Model.Ingredients)
+                {
+                    <option value="@ingredient.Id">@ingredient.Name</option>
+                }
+            </select>
+        </label>
+
+        <label>
+            Заказано
+            <input type="number" min="1" value="1" data-name="OrderedQty" />
+        </label>
+
+        <label>
+            Принято
+            <input type="number" min="0" value="0" data-name="ReceivedQty" />
+        </label>
+
+        <label>
+            Цена
+            <input type="number" min="0" step="0.01" value="0" data-name="UnitCost" />
+        </label>
+
+        <button type="button" class="btn btn-ghost" onclick="removePurchaseDetailRow(this);">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+</template>
+
+<div class="module-stack">
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="flash-banner flash-banner-success module-reveal" style="--delay:0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+
+    @if (TempData["WarningMessage"] is string warningMessage)
+    {
+        <div class="flash-banner flash-banner-warning module-reveal" style="--delay:0;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@warningMessage</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="flash-banner flash-banner-error module-reveal" style="--delay:0;">
+            <i class="bi bi-x-octagon-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <article class="surface module-hero module-reveal" style="--delay:1;">
+        <div class="module-hero__content">
+            <div class="module-hero__icon">
+                <i class="bi bi-truck-flatbed"></i>
+            </div>
+
+            <div class="module-hero__text">
+                <p class="eyebrow">Модуль поставок</p>
+                <h3>Закупки</h3>
+                <p class="muted">
+                    Управляйте заказами поставщикам, статусами поступления и составом каждой закупки.
+                    Детали заказа редактируются на одной странице без переключения между экранами.
+                </p>
+
+                <div class="module-hero__pills">
+                    <span class="module-hero__pill">
+                        <i class="bi bi-card-checklist"></i>
+                        Всего закупок: <strong>@Model.TotalOrders</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-clock-history"></i>
+                        В работе: <strong>@Model.OrdersInProgress</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-building"></i>
+                        Поставщиков: <strong>@Model.SuppliersCount</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <form method="get" asp-action="Index" class="surface module-toolbar-surface module-reveal" style="--delay:2;">
+        <div class="module-filter-grid">
+            <label>
+                Поиск
+                <input type="search"
+                       name="searchTerm"
+                       value="@Model.SearchTerm"
+                       placeholder="№ закупки, поставщик, статус, ингредиент" />
+            </label>
+
+            <label>
+                Поставщик
+                <select name="supplierId">
+                    <option value="">Все поставщики</option>
+                    @foreach (var supplier in Model.Suppliers)
+                    {
+                        <option value="@supplier.Id" selected="@(Model.SupplierId == supplier.Id ? "selected" : null)">
+                            @supplier.Name
+                        </option>
+                    }
+                </select>
+            </label>
+
+            <label>
+                Статус
+                <select name="status">
+                    <option value="all" selected="@(Model.Status == "all" ? "selected" : null)">Все статусы</option>
+                    @foreach (var option in Model.StatusOptions)
+                    {
+                        <option value="@option" selected="@(Model.Status == option ? "selected" : null)">
+                            @option
+                        </option>
+                    }
+                </select>
+            </label>
+        </div>
+
+        <div class="module-action-row">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-funnel-fill"></i>
+                Применить фильтры
+            </button>
+
+            <a asp-action="Index" class="btn btn-ghost">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сбросить
+            </a>
+
+            <button type="button" class="btn btn-secondary" onclick="startPurchaseOrderCreateMode();">
+                <i class="bi bi-plus-square-fill"></i>
+                Новая закупка
+            </button>
+
+            <a asp-action="ExportExcel"
+               asp-route-searchTerm="@Model.SearchTerm"
+               asp-route-supplierId="@Model.SupplierId"
+               asp-route-status="@Model.Status"
+               class="btn btn-ghost">
+                <i class="bi bi-file-earmark-excel-fill"></i>
+                Excel
+            </a>
+
+            <a asp-action="ExportPdf"
+               asp-route-searchTerm="@Model.SearchTerm"
+               asp-route-supplierId="@Model.SupplierId"
+               asp-route-status="@Model.Status"
+               class="btn btn-ghost">
+                <i class="bi bi-file-earmark-pdf-fill"></i>
+                PDF
+            </a>
+        </div>
+    </form>
+
+    <div class="metrics-grid">
+        <article class="metric-card module-reveal" style="--delay:3;">
+            <p class="metric-title">Всего закупок</p>
+            <p class="metric-value">@Model.TotalOrders</p>
+            <p class="metric-subtitle">Заведено в системе</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:4;">
+            <p class="metric-title">В работе</p>
+            <p class="metric-value">@Model.OrdersInProgress</p>
+            <p class="metric-subtitle">Ожидают поставку или приемку</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:5;">
+            <p class="metric-title">Получено</p>
+            <p class="metric-value">@Model.OrdersReceived</p>
+            <p class="metric-subtitle">Завершенные закупки</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:6;">
+            <p class="metric-title">Поставщики</p>
+            <p class="metric-value">@Model.SuppliersCount</p>
+            <p class="metric-subtitle">Доступны в справочнике</p>
+        </article>
+    </div>
+
+    <div class="module-crud-layout">
+        <article class="surface module-reveal" style="--delay:7;">
+            <div class="surface-header">
+                <div>
+                    <h3>Список закупок</h3>
+                    <p class="muted" style="margin: 6px 0 0;">
+                        Показываются заказы с учетом текущих фильтров.
+                    </p>
+                </div>
+
+                <span class="dashboard-badge">@Model.PurchaseOrders.Count записей</span>
+            </div>
+
+            @if (Model.PurchaseOrders.Count == 0)
+            {
+                <div class="dashboard-empty">По текущим фильтрам закупки не найдены.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Закупка</th>
+                                <th>Поставщик</th>
+                                <th>Статус</th>
+                                <th>Дата</th>
+                                <th>Поставка</th>
+                                <th>Позиций</th>
+                                <th>Сумма</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var order in Model.PurchaseOrders)
+                            {
+                                var statusClass = order.Status switch
+                                {
+                                    "Получен" => "purchase-status-chip purchase-status-chip--done",
+                                    "Отменен" => "purchase-status-chip purchase-status-chip--cancelled",
+                                    _ => "purchase-status-chip"
+                                };
+
+                                <tr>
+                                    <td>
+                                        <div class="purchase-table-meta">
+                                            <strong>№@order.Number</strong>
+                                            <small>
+                                                @string.Join(", ", order.Details.Take(2).Select(d => d.IngredientName))
+                                                @(order.Details.Count > 2 ? "..." : string.Empty)
+                                                @(order.Details.Any(d => d.IsLegacyProduct) ? " • есть legacy-позиции" : string.Empty)
+                                            </small>
+                                        </div>
+                                    </td>
+                                    <td>@order.SupplierName</td>
+                                    <td>
+                                        <span class="@statusClass">@order.Status</span>
+                                    </td>
+                                    <td>@(order.OrderDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                    <td>@(order.ExpectedArrivalDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                    <td>@order.ItemsCount</td>
+                                    <td>@order.TotalAmount.ToString("N2") ₽</td>
+                                    <td>
+                                        <div class="table-actions">
+                                            @if (order.CanEdit)
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-ghost btn-sm"
+                                                        onclick="startPurchaseOrderEditMode(this);"
+                                                        data-poid="@order.Number"
+                                                        data-supplier-id="@order.SupplierId"
+                                                        data-order-date="@(order.OrderDate?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                                                        data-expected-arrival-date="@(order.ExpectedArrivalDate?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                                                        data-status="@order.Status"
+                                                        data-details="@HtmlEncoder.Default.Encode(JsonSerializer.Serialize(order.Details))">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                    Изменить
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-ghost btn-sm"
+                                                        disabled
+                                                        title="@order.EditDisabledReason">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                    Legacy
+                                                </button>
+                                            }
+
+                                            <form asp-action="Delete"
+                                                  method="post"
+                                                  data-confirm="true"
+                                                  data-confirm-title="Удалить закупку?"
+                                                  data-confirm-message="Закупка будет удалена вместе со всеми ее позициями. Если по ней уже есть принятое количество, система вместо удаления переведет заказ в статус «Отменен»."
+                                                  data-confirm-accept="Удалить">
+                                                <input type="hidden" name="id" value="@order.Number" />
+                                                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                                                <input type="hidden" name="supplierId" value="@Model.SupplierId" />
+                                                <input type="hidden" name="status" value="@Model.Status" />
+
+                                                <button type="submit" class="btn btn-secondary btn-sm">
+                                                    <i class="bi bi-trash3-fill"></i>
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+
+        <aside class="surface sticky-surface module-editor-card module-reveal" style="--delay:8;">
+            <div class="surface-header">
+                <div>
+                    <h3 id="purchaseOrderEditorTitle">@(isEditMode ? "Редактирование закупки" : "Новая закупка")</h3>
+                    <p id="purchaseOrderEditorSubtitle" class="muted" style="margin: 6px 0 0;">
+                        @(isEditMode
+                            ? "Измените параметры заказа поставщику и его состав."
+                            : "Заполните основные параметры и добавьте позиции закупки.")
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startPurchaseOrderCreateMode();">
+                    <i class="bi bi-plus-circle"></i>
+                    Очистить
+                </button>
+            </div>
+
+            <div asp-validation-summary="All" class="flash-banner flash-banner-error validation-banner @(ViewData.ModelState.IsValid ? "hidden" : string.Empty)">
+            </div>
+
+            <form id="purchaseOrderEditorForm"
+                  asp-action="@(isEditMode ? "Update" : "Create")"
+                  method="post"
+                  class="module-stack">
+                <input type="hidden" id="purchaseOrderPoid" name="Poid" value="@Model.Editor.Poid" />
+                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                <input type="hidden" name="supplierId" value="@Model.SupplierId" />
+                <input type="hidden" name="status" value="@Model.Status" />
+
+                <div class="form-grid">
+                    <label class="form-span-2">
+                        Поставщик
+                        <select id="purchaseOrderSupplierId" name="SupplierId">
+                            <option value="">Выберите поставщика</option>
+                            @foreach (var supplier in Model.Suppliers)
+                            {
+                                <option value="@supplier.Id" selected="@(Model.Editor.SupplierId == supplier.Id ? "selected" : null)">
+                                    @supplier.Name
+                                </option>
+                            }
+                        </select>
+                    </label>
+
+                    <label>
+                        Дата заказа
+                        <input id="purchaseOrderDate"
+                               type="date"
+                               name="OrderDate"
+                               value="@(Model.Editor.OrderDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                    </label>
+
+                    <label>
+                        Ожидаемая поставка
+                        <input id="purchaseOrderExpectedArrivalDate"
+                               type="date"
+                               name="ExpectedArrivalDate"
+                               value="@(Model.Editor.ExpectedArrivalDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                    </label>
+
+                    <label class="form-span-2">
+                        Статус
+                        <select id="purchaseOrderStatus" name="Status">
+                            @foreach (var option in Model.StatusOptions)
+                            {
+                                <option value="@option" selected="@(Model.Editor.Status == option ? "selected" : null)">
+                                    @option
+                                </option>
+                            }
+                        </select>
+                    </label>
+                </div>
+
+                <div class="module-stack">
+                    <div class="surface-header" style="margin-bottom: 0;">
+                        <h3 style="font-size: 18px;">Состав закупки</h3>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="addPurchaseDetailRow();">
+                            <i class="bi bi-plus-lg"></i>
+                            Добавить позицию
+                        </button>
+                    </div>
+
+                    <div id="purchaseDetailRows" class="purchase-detail-list">
+                        @for (var i = 0; i < Model.Editor.Details.Count; i++)
+                        {
+                            <div class="purchase-detail-row" data-detail-row>
+                                <label>
+                                    Ингредиент
+                                    <select name="Details[@i].IngredientId">
+                                        <option value="">Выберите ингредиент</option>
+                                        @foreach (var ingredient in Model.Ingredients)
+                                        {
+                                            <option value="@ingredient.Id" selected="@(Model.Editor.Details[i].IngredientId == ingredient.Id ? "selected" : null)">
+                                                @ingredient.Name
+                                            </option>
+                                        }
+                                    </select>
+                                </label>
+
+                                <label>
+                                    Заказано
+                                    <input type="number" min="1" name="Details[@i].OrderedQty" value="@Model.Editor.Details[i].OrderedQty" />
+                                </label>
+
+                                <label>
+                                    Принято
+                                    <input type="number" min="0" name="Details[@i].ReceivedQty" value="@Model.Editor.Details[i].ReceivedQty" />
+                                </label>
+
+                                <label>
+                                    Цена
+                                    <input type="number" min="0" step="0.01" name="Details[@i].UnitCost" value="@Model.Editor.Details[i].UnitCost" />
+                                </label>
+
+                                <button type="button" class="btn btn-ghost" onclick="removePurchaseDetailRow(this);">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="module-action-row">
+                    <button id="purchaseOrderSubmitButton" type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill"></i>
+                        @(isEditMode ? "Сохранить изменения" : "Создать закупку")
+                    </button>
+
+                    <button type="button" class="btn btn-secondary" onclick="startPurchaseOrderCreateMode();">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сбросить форму
+                    </button>
+                </div>
+            </form>
+        </aside>
+    </div>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:9;">
+            <div class="surface-header">
+                <h3>Сводка по поставкам</h3>
+                <span class="dashboard-badge">Контроль статусов</span>
+            </div>
+
+            <div class="purchase-summary-grid">
+                <div class="purchase-summary-card">
+                    <strong>@Model.OrdersInProgress</strong>
+                    <small>заказов сейчас находятся в работе</small>
+                </div>
+
+                <div class="purchase-summary-card">
+                    <strong>@Model.OrdersReceived</strong>
+                    <small>закупок уже закрыты как полученные</small>
+                </div>
+
+                <div class="purchase-summary-card">
+                    <strong>@Model.PurchaseOrders.Count</strong>
+                    <small>заказов выведены в таблице по текущему фильтру</small>
+                </div>
+            </div>
+        </article>
+
+        <article class="surface module-reveal" style="--delay:10;">
+            <div class="surface-header">
+                <h3>Фокус фильтра</h3>
+                <span class="dashboard-badge">Быстрая навигация</span>
+            </div>
+
+            <div class="purchase-summary-grid">
+                <div class="purchase-summary-card">
+                    <strong>@(string.IsNullOrWhiteSpace(Model.SearchTerm) ? "Без текста" : Model.SearchTerm)</strong>
+                    <small>активный поисковый запрос</small>
+                </div>
+
+                <div class="purchase-summary-card">
+                    <strong>@(Model.Suppliers.FirstOrDefault(s => s.Id == Model.SupplierId)?.Name ?? "Все поставщики")</strong>
+                    <small>текущий фильтр по поставщику</small>
+                </div>
+
+                <div class="purchase-summary-card">
+                    <strong>@(Model.Status == "all" ? "Все статусы" : Model.Status)</strong>
+                    <small>активный статус фильтрации</small>
+                </div>
+            </div>
+        </article>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const purchaseOrderCreateAction = '@Url.Action("Create", "PurchaseOrders")';
+        const purchaseOrderUpdateAction = '@Url.Action("Update", "PurchaseOrders")';
+
+        function createPurchaseDetailRow(detail) {
+            const template = document.getElementById('purchaseDetailRowTemplate');
+            const clone = template.content.firstElementChild.cloneNode(true);
+
+            clone.querySelector('[data-name="IngredientId"]').value = detail?.IngredientId ?? detail?.ingredientId ?? '';
+            clone.querySelector('[data-name="OrderedQty"]').value = detail?.OrderedQty ?? detail?.orderedQty ?? 1;
+            clone.querySelector('[data-name="ReceivedQty"]').value = detail?.ReceivedQty ?? detail?.receivedQty ?? 0;
+            clone.querySelector('[data-name="UnitCost"]').value = detail?.UnitCost ?? detail?.unitCost ?? 0;
+
+            return clone;
+        }
+
+        function reindexPurchaseDetailRows() {
+            const rows = document.querySelectorAll('#purchaseDetailRows [data-detail-row]');
+
+            rows.forEach((row, index) => {
+                row.querySelector('[data-name="IngredientId"], select[name*="IngredientId"]')?.setAttribute('name', `Details[${index}].IngredientId`);
+                row.querySelector('[data-name="OrderedQty"], input[name*="OrderedQty"]')?.setAttribute('name', `Details[${index}].OrderedQty`);
+                row.querySelector('[data-name="ReceivedQty"], input[name*="ReceivedQty"]')?.setAttribute('name', `Details[${index}].ReceivedQty`);
+                row.querySelector('[data-name="UnitCost"], input[name*="UnitCost"]')?.setAttribute('name', `Details[${index}].UnitCost`);
+            });
+        }
+
+        function addPurchaseDetailRow(detail = null) {
+            const container = document.getElementById('purchaseDetailRows');
+            container.appendChild(createPurchaseDetailRow(detail));
+            reindexPurchaseDetailRows();
+        }
+
+        function removePurchaseDetailRow(button) {
+            const container = document.getElementById('purchaseDetailRows');
+            button.closest('[data-detail-row]').remove();
+
+            if (container.children.length === 0) {
+                addPurchaseDetailRow();
+            } else {
+                reindexPurchaseDetailRows();
+            }
+        }
+
+        function resetPurchaseDetailRows(details = null) {
+            const container = document.getElementById('purchaseDetailRows');
+            container.innerHTML = '';
+
+            if (details && details.length > 0) {
+                details.forEach(detail => addPurchaseDetailRow(detail));
+                return;
+            }
+
+            addPurchaseDetailRow();
+        }
+
+        function startPurchaseOrderCreateMode() {
+            const form = document.getElementById('purchaseOrderEditorForm');
+
+            form.action = purchaseOrderCreateAction;
+            document.getElementById('purchaseOrderEditorTitle').textContent = 'Новая закупка';
+            document.getElementById('purchaseOrderEditorSubtitle').textContent = 'Заполните основные параметры и добавьте позиции закупки.';
+            document.getElementById('purchaseOrderSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Создать закупку';
+
+            document.getElementById('purchaseOrderPoid').value = '';
+            document.getElementById('purchaseOrderSupplierId').value = '';
+            document.getElementById('purchaseOrderDate').value = '@DateTime.Today.ToString("yyyy-MM-dd")';
+            document.getElementById('purchaseOrderExpectedArrivalDate').value = '';
+            document.getElementById('purchaseOrderStatus').value = 'Черновик';
+
+            resetPurchaseDetailRows();
+        }
+
+        function startPurchaseOrderEditMode(button) {
+            const form = document.getElementById('purchaseOrderEditorForm');
+            const data = button.dataset;
+            const details = JSON.parse(data.details || '[]');
+
+            form.action = purchaseOrderUpdateAction;
+            document.getElementById('purchaseOrderEditorTitle').textContent = 'Редактирование закупки';
+            document.getElementById('purchaseOrderEditorSubtitle').textContent = 'Измените параметры заказа поставщику и его состав.';
+            document.getElementById('purchaseOrderSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Сохранить изменения';
+
+            document.getElementById('purchaseOrderPoid').value = data.poid || '';
+            document.getElementById('purchaseOrderSupplierId').value = data.supplierId || '';
+            document.getElementById('purchaseOrderDate').value = data.orderDate || '';
+            document.getElementById('purchaseOrderExpectedArrivalDate').value = data.expectedArrivalDate || '';
+            document.getElementById('purchaseOrderStatus').value = data.status || 'Черновик';
+
+            resetPurchaseDetailRows(details);
+
+            form.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            reindexPurchaseDetailRows();
+        });
+    </script>
+}

@@ -1,0 +1,780 @@
+@using System.Linq
+@model Diplom.ViewModels.ProductsIndexViewModel
+
+@{
+    var isProductEditMode = Model.ProductEditor.ProductId.HasValue;
+    var isCategoryEditMode = Model.CategoryEditor.CategoryId.HasValue;
+}
+
+@section Styles {
+    <style>
+        .product-name-cell {
+            display: grid;
+            gap: 4px;
+        }
+
+        .product-name-cell strong {
+            line-height: 1.2;
+        }
+
+        .product-name-cell small {
+            color: var(--muted);
+        }
+
+        .product-thumb {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            overflow: hidden;
+            flex: 0 0 44px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, rgba(166, 0, 166, 0.14), rgba(210, 95, 210, 0.22));
+            color: var(--primary-dark);
+        }
+
+        .product-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .product-name-wrap {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .category-summary-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .category-summary-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(210, 95, 210, 0.16);
+            background: rgba(255, 255, 255, 0.52);
+        }
+
+        .category-summary-card strong {
+            display: block;
+            font-size: 18px;
+            color: var(--primary-dark);
+        }
+
+        .category-summary-card small {
+            color: var(--muted);
+        }
+
+        .category-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(210, 95, 210, 0.14);
+            background: rgba(255, 255, 255, 0.56);
+        }
+
+        .category-item__meta {
+            display: grid;
+            gap: 4px;
+        }
+
+        .category-item__meta small {
+            color: var(--muted);
+        }
+
+        .product-image-panel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .product-image-preview {
+            min-height: 180px;
+            border-radius: 20px;
+            overflow: hidden;
+            display: grid;
+            place-items: center;
+            border: 1px dashed rgba(210, 95, 210, 0.26);
+            background: rgba(255, 255, 255, 0.46);
+            color: var(--primary-dark);
+        }
+
+        .product-image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .product-image-preview i {
+            font-size: 42px;
+            opacity: 0.72;
+        }
+    </style>
+}
+
+<div class="module-stack">
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="flash-banner flash-banner-success module-reveal" style="--delay:0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+
+    @if (TempData["WarningMessage"] is string warningMessage)
+    {
+        <div class="flash-banner flash-banner-warning module-reveal" style="--delay:0;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@warningMessage</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="flash-banner flash-banner-error module-reveal" style="--delay:0;">
+            <i class="bi bi-x-octagon-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <article class="surface module-hero module-reveal" style="--delay:1;">
+        <div class="module-hero__content">
+            <div class="module-hero__icon">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+            </div>
+
+            <div class="module-hero__text">
+                <p class="eyebrow">Ассортимент</p>
+                <h3>Товары и категории</h3>
+                <p class="muted">
+                    Управляйте карточками товаров, базовыми остатками, активностью ассортимента и справочником категорий.
+                    Изменения товара синхронизируются со складским остатком.
+                </p>
+
+                <div class="module-hero__pills">
+                    <span class="module-hero__pill">
+                        <i class="bi bi-cake2-fill"></i>
+                        Всего товаров: <strong>@Model.TotalProducts</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-check2-circle"></i>
+                        Активных: <strong>@Model.ActiveProducts</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-tags-fill"></i>
+                        Категорий: <strong>@Model.TotalCategories</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <form method="get" asp-action="Index" class="surface module-toolbar-surface module-reveal" style="--delay:2;">
+        <div class="module-filter-grid">
+            <label>
+                Поиск
+                <input type="search"
+                       name="searchTerm"
+                       value="@Model.SearchTerm"
+                       placeholder="Товар, описание или категория" />
+            </label>
+
+            <label>
+                Категория
+                <select name="categoryId">
+                    <option value="">Все категории</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.Id" selected="@(Model.CategoryId == category.Id ? "selected" : null)">
+                            @category.Name
+                        </option>
+                    }
+                </select>
+            </label>
+
+            <label>
+                Статус
+                <select name="activityState">
+                    <option value="all" selected="@(Model.ActivityState == "all" ? "selected" : null)">Все товары</option>
+                    <option value="active" selected="@(Model.ActivityState == "active" ? "selected" : null)">Активные</option>
+                    <option value="inactive" selected="@(Model.ActivityState == "inactive" ? "selected" : null)">Неактивные</option>
+                    <option value="lowstock" selected="@(Model.ActivityState == "lowstock" ? "selected" : null)">Низкий остаток</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="module-action-row">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search"></i>
+                Применить фильтры
+            </button>
+
+            <a asp-action="Index" class="btn btn-ghost">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сбросить
+            </a>
+
+            <button type="button" class="btn btn-secondary" onclick="startProductCreateMode();">
+                <i class="bi bi-plus-square-fill"></i>
+                Новый товар
+            </button>
+        </div>
+    </form>
+
+    <div class="metrics-grid">
+        <article class="metric-card module-reveal" style="--delay:3;">
+            <p class="metric-title">Всего товаров</p>
+            <p class="metric-value">@Model.TotalProducts</p>
+            <p class="metric-subtitle">Карточек ассортимента в системе</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:4;">
+            <p class="metric-title">Активные товары</p>
+            <p class="metric-value">@Model.ActiveProducts</p>
+            <p class="metric-subtitle">Доступны для продажи и работы</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:5;">
+            <p class="metric-title">Категории</p>
+            <p class="metric-value">@Model.TotalCategories</p>
+            <p class="metric-subtitle">Заполнено в справочнике категорий</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:6;">
+            <p class="metric-title">Низкий остаток</p>
+            <p class="metric-value">@Model.LowStockProducts</p>
+            <p class="metric-subtitle">Товаров с остатком 5 и ниже</p>
+        </article>
+    </div>
+
+    <div class="module-crud-layout">
+        <article class="surface module-reveal" style="--delay:7;">
+            <div class="surface-header">
+                <div>
+                    <h3>Список товаров</h3>
+                    <p class="muted" style="margin: 6px 0 0;">
+                        Таблица учитывает текущие фильтры и поиск по ассортименту.
+                    </p>
+                </div>
+
+                <span class="dashboard-badge">@Model.Products.Count записей</span>
+            </div>
+
+            @if (Model.Products.Count == 0)
+            {
+                <div class="dashboard-empty">По текущим фильтрам товары не найдены.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Товар</th>
+                                <th>Категория</th>
+                                <th>Цена</th>
+                                <th>Остаток</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Products)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="product-name-wrap">
+                                            <div class="product-thumb">
+                                                @if (!string.IsNullOrWhiteSpace(item.PhotoPath))
+                                                {
+                                                    <img src="@item.PhotoPath" alt="@item.NameProduct" />
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-image"></i>
+                                                }
+                                            </div>
+
+                                            <div class="product-name-cell">
+                                                <strong>@item.NameProduct</strong>
+                                                <small>@(string.IsNullOrWhiteSpace(item.Description) ? "Описание не заполнено" : item.Description)</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>@item.CategoryName</td>
+                                    <td>@item.Price.ToString("N2") ₽</td>
+                                    <td>@item.StockQuantity</td>
+                                    <td>
+                                        @if (!item.IsActive)
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--muted">Неактивен</span>
+                                        }
+                                        else if (item.StockQuantity <= 5)
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--warn">Низкий остаток</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--ok">Активен</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <button type="button"
+                                                    class="btn btn-ghost btn-sm"
+                                                    onclick="startProductEditMode(this);"
+                                                    data-product-id="@item.ProductId"
+                                                    data-name-product="@item.NameProduct"
+                                                    data-category-id="@item.CategoryId"
+                                                    data-price="@item.Price"
+                                                    data-stock-quantity="@item.StockQuantity"
+                                                    data-is-active="@item.IsActive.ToString().ToLowerInvariant()"
+                                                    data-description="@item.Description"
+                                                    data-photo-path="@item.PhotoPath"
+                                                    data-recipe-method="@item.RecipeMethod">
+                                                <i class="bi bi-pencil-square"></i>
+                                                Изменить
+                                            </button>
+
+                                            <form asp-action="DeleteProduct"
+                                                  method="post"
+                                                  data-confirm="true"
+                                                  data-confirm-title="Удалить товар?"
+                                                  data-confirm-message="Если у товара уже есть связанные продажи, закупки или складские движения, система не удалит его физически, а переведет в неактивный статус."
+                                                  data-confirm-accept="Удалить">
+                                                <input type="hidden" name="id" value="@item.ProductId" />
+                                                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                                                <input type="hidden" name="categoryId" value="@Model.CategoryId" />
+                                                <input type="hidden" name="activityState" value="@Model.ActivityState" />
+
+                                                <button type="submit" class="btn btn-secondary btn-sm">
+                                                    <i class="bi bi-trash3-fill"></i>
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+
+        <aside class="surface sticky-surface module-editor-card module-reveal" style="--delay:8;">
+            <div class="surface-header">
+                <div>
+                    <h3 id="productEditorTitle">@(isProductEditMode ? "Редактирование товара" : "Новый товар")</h3>
+                    <p id="productEditorSubtitle" class="muted" style="margin: 6px 0 0;">
+                        @(isProductEditMode
+                            ? "Измените параметры карточки товара и сохраните обновления."
+                            : "Заполните основные параметры нового товара.")
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startProductCreateMode();">
+                    <i class="bi bi-plus-circle"></i>
+                    Очистить
+                </button>
+            </div>
+
+            <div asp-validation-summary="All" class="flash-banner flash-banner-error validation-banner @(ViewData.ModelState.IsValid ? "hidden" : string.Empty)">
+            </div>
+
+            <form id="productEditorForm"
+                  asp-action="@(isProductEditMode ? "UpdateProduct" : "CreateProduct")"
+                  method="post"
+                  enctype="multipart/form-data"
+                  class="module-stack">
+                <input type="hidden" id="productId" name="ProductId" value="@Model.ProductEditor.ProductId" />
+                <input type="hidden" id="productExistingPhotoPath" name="ExistingPhotoPath" value="@Model.ProductEditor.ExistingPhotoPath" />
+                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                <input type="hidden" name="categoryId" value="@Model.CategoryId" />
+                <input type="hidden" name="activityState" value="@Model.ActivityState" />
+
+                <div class="form-grid">
+                    <label class="form-span-2">
+                        Название товара
+                        <input id="productNameProduct" name="NameProduct" value="@Model.ProductEditor.NameProduct" maxlength="100" />
+                    </label>
+
+                    <label>
+                        Категория
+                        <select id="productCategoryId" name="CategoryId">
+                            <option value="">Выберите категорию</option>
+                            @foreach (var category in Model.Categories)
+                            {
+                                <option value="@category.Id" selected="@(Model.ProductEditor.CategoryId == category.Id ? "selected" : null)">
+                                    @category.Name
+                                </option>
+                            }
+                        </select>
+                    </label>
+
+                    <label>
+                        Цена
+                        <input id="productPrice" type="number" min="0" step="0.01" name="Price" value="@Model.ProductEditor.Price" />
+                    </label>
+
+                    <label>
+                        Остаток
+                        <input id="productStockQuantity" type="number" min="0" name="StockQuantity" value="@Model.ProductEditor.StockQuantity" />
+                    </label>
+
+                    <label class="toggle">
+                        <input type="hidden" name="IsActive" value="false" />
+                        <input id="productIsActive"
+                               type="checkbox"
+                               name="IsActive"
+                               value="true"
+                               checked="@(Model.ProductEditor.IsActive ? "checked" : null)" />
+                        Активен для работы и продаж
+                    </label>
+
+                    <label class="form-span-2">
+                        Описание
+                        <textarea id="productDescription" name="Description" rows="3">@Model.ProductEditor.Description</textarea>
+                    </label>
+
+                    <label class="form-span-2">
+                        Рецепт / технология
+                        <textarea id="productRecipeMethod" name="RecipeMethod" rows="4">@Model.ProductEditor.RecipeMethod</textarea>
+                    </label>
+                </div>
+
+                <div class="product-image-panel">
+                    <div id="productImagePreview" class="product-image-preview" data-existing-photo="@Model.ProductEditor.ExistingPhotoPath">
+                        @if (!string.IsNullOrWhiteSpace(Model.ProductEditor.ExistingPhotoPath))
+                        {
+                            <img src="@Model.ProductEditor.ExistingPhotoPath" alt="Фото товара" />
+                        }
+                        else
+                        {
+                            <i class="bi bi-image"></i>
+                        }
+                    </div>
+
+                    <label>
+                        Изображение товара
+                        <input id="productPhoto"
+                               type="file"
+                               name="Photo"
+                               accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" />
+                    </label>
+                </div>
+
+                <div class="module-action-row">
+                    <button id="productSubmitButton" type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill"></i>
+                        @(isProductEditMode ? "Сохранить изменения" : "Создать товар")
+                    </button>
+
+                    <button type="button" class="btn btn-secondary" onclick="startProductCreateMode();">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сбросить форму
+                    </button>
+                </div>
+            </form>
+        </aside>
+    </div>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:9;">
+            <div class="surface-header">
+                <div>
+                    <h3>Категории</h3>
+                    <p class="muted" style="margin: 6px 0 0;">
+                        Справочник категорий для ассортимента.
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startCategoryCreateMode();">
+                    <i class="bi bi-plus-lg"></i>
+                    Новая категория
+                </button>
+            </div>
+
+            @if (Model.CategoryItems.Count == 0)
+            {
+                <div class="dashboard-empty">Категории пока не созданы.</div>
+            }
+            else
+            {
+                <div class="category-list">
+                    @foreach (var item in Model.CategoryItems)
+                    {
+                        <div class="category-item">
+                            <div class="category-item__meta">
+                                <strong>@item.NameCategory</strong>
+                                <small>Всего товаров: @item.ProductCount, активных: @item.ActiveProductCount</small>
+                            </div>
+
+                            <div class="table-actions">
+                                <button type="button"
+                                        class="btn btn-ghost btn-sm"
+                                        onclick="startCategoryEditMode(this);"
+                                        data-category-id="@item.CategoryId"
+                                        data-name-category="@item.NameCategory">
+                                    <i class="bi bi-pencil-square"></i>
+                                    Изменить
+                                </button>
+
+                                <form asp-action="DeleteCategory"
+                                      method="post"
+                                      data-confirm="true"
+                                      data-confirm-title="Удалить категорию?"
+                                      data-confirm-message="Категория будет удалена только если к ней не привязаны товары."
+                                      data-confirm-accept="Удалить">
+                                    <input type="hidden" name="id" value="@item.CategoryId" />
+                                    <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="categoryId" value="@Model.CategoryId" />
+                                    <input type="hidden" name="activityState" value="@Model.ActivityState" />
+
+                                    <button type="submit" class="btn btn-secondary btn-sm">
+                                        <i class="bi bi-trash3-fill"></i>
+                                        Удалить
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="surface module-reveal" style="--delay:10;">
+            <div class="surface-header">
+                <div>
+                    <h3 id="categoryEditorTitle">@(isCategoryEditMode ? "Редактирование категории" : "Новая категория")</h3>
+                    <p id="categoryEditorSubtitle" class="muted" style="margin: 6px 0 0;">
+                        @(isCategoryEditMode
+                            ? "Измените название категории и сохраните изменения."
+                            : "Создайте новую категорию для товаров.")
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startCategoryCreateMode();">
+                    <i class="bi bi-plus-circle"></i>
+                    Очистить
+                </button>
+            </div>
+
+            <form id="categoryEditorForm"
+                  asp-action="@(isCategoryEditMode ? "UpdateCategory" : "CreateCategory")"
+                  method="post"
+                  class="module-stack">
+                <input type="hidden" id="categoryIdEditor" name="CategoryId" value="@Model.CategoryEditor.CategoryId" />
+                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                <input type="hidden" name="categoryId" value="@Model.CategoryId" />
+                <input type="hidden" name="activityState" value="@Model.ActivityState" />
+
+                <label>
+                    Название категории
+                    <input id="categoryNameEditor" name="NameCategory" value="@Model.CategoryEditor.NameCategory" maxlength="50" />
+                </label>
+
+                <div class="module-action-row">
+                    <button id="categorySubmitButton" type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill"></i>
+                        @(isCategoryEditMode ? "Сохранить изменения" : "Создать категорию")
+                    </button>
+
+                    <button type="button" class="btn btn-secondary" onclick="startCategoryCreateMode();">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сбросить форму
+                    </button>
+                </div>
+            </form>
+        </article>
+    </div>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:11;">
+            <div class="surface-header">
+                <h3>Сводка по ассортименту</h3>
+                <span class="dashboard-badge">Быстрый обзор</span>
+            </div>
+
+            <div class="category-summary-grid">
+                <div class="category-summary-card">
+                    <strong>@Model.ActiveProducts</strong>
+                    <small>товаров доступны в активном статусе</small>
+                </div>
+
+                <div class="category-summary-card">
+                    <strong>@Model.LowStockProducts</strong>
+                    <small>товаров имеют остаток 5 и ниже</small>
+                </div>
+
+                <div class="category-summary-card">
+                    <strong>@Model.Products.Count</strong>
+                    <small>товаров попали в текущую выборку фильтра</small>
+                </div>
+            </div>
+        </article>
+
+        <article class="surface module-reveal" style="--delay:12;">
+            <div class="surface-header">
+                <h3>Фокус фильтра</h3>
+                <span class="dashboard-badge">Навигация</span>
+            </div>
+
+            <div class="category-summary-grid">
+                <div class="category-summary-card">
+                    <strong>@(string.IsNullOrWhiteSpace(Model.SearchTerm) ? "Без текста" : Model.SearchTerm)</strong>
+                    <small>активный поисковый запрос</small>
+                </div>
+
+                <div class="category-summary-card">
+                    <strong>@(Model.Categories.FirstOrDefault(c => c.Id == Model.CategoryId)?.Name ?? "Все категории")</strong>
+                    <small>текущий фильтр по категории</small>
+                </div>
+
+                <div class="category-summary-card">
+                    <strong>
+                        @switch (Model.ActivityState)
+                        {
+                            case "active":
+                                @:Активные
+                                break;
+                            case "inactive":
+                                @:Неактивные
+                                break;
+                            case "lowstock":
+                                @:Низкий остаток
+                                break;
+                            default:
+                                @:Все товары
+                                break;
+                        }
+                    </strong>
+                    <small>активный фильтр по состоянию</small>
+                </div>
+            </div>
+        </article>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const productCreateAction = '@Url.Action("CreateProduct", "Products")';
+        const productUpdateAction = '@Url.Action("UpdateProduct", "Products")';
+        const categoryCreateAction = '@Url.Action("CreateCategory", "Products")';
+        const categoryUpdateAction = '@Url.Action("UpdateCategory", "Products")';
+        const emptyProductPreviewMarkup = '<i class="bi bi-image"></i>';
+
+        function updateProductPreview(source) {
+            const preview = document.getElementById('productImagePreview');
+
+            if (!source) {
+                preview.innerHTML = emptyProductPreviewMarkup;
+                return;
+            }
+
+            preview.innerHTML = `<img src="${source}" alt="Фото товара" />`;
+        }
+
+        function startProductCreateMode() {
+            const form = document.getElementById('productEditorForm');
+
+            form.action = productCreateAction;
+            document.getElementById('productEditorTitle').textContent = 'Новый товар';
+            document.getElementById('productEditorSubtitle').textContent = 'Заполните основные параметры нового товара.';
+            document.getElementById('productSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Создать товар';
+
+            document.getElementById('productId').value = '';
+            document.getElementById('productNameProduct').value = '';
+            document.getElementById('productCategoryId').value = '';
+            document.getElementById('productPrice').value = '0';
+            document.getElementById('productStockQuantity').value = '0';
+            document.getElementById('productExistingPhotoPath').value = '';
+            document.getElementById('productPhoto').value = '';
+            document.getElementById('productDescription').value = '';
+            document.getElementById('productRecipeMethod').value = '';
+            document.getElementById('productIsActive').checked = true;
+            updateProductPreview('');
+        }
+
+        function startProductEditMode(button) {
+            const form = document.getElementById('productEditorForm');
+            const data = button.dataset;
+
+            form.action = productUpdateAction;
+            document.getElementById('productEditorTitle').textContent = 'Редактирование товара';
+            document.getElementById('productEditorSubtitle').textContent = 'Измените параметры карточки товара и сохраните обновления.';
+            document.getElementById('productSubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Сохранить изменения';
+
+            document.getElementById('productId').value = data.productId || '';
+            document.getElementById('productNameProduct').value = data.nameProduct || '';
+            document.getElementById('productCategoryId').value = data.categoryId || '';
+            document.getElementById('productPrice').value = data.price || '0';
+            document.getElementById('productStockQuantity').value = data.stockQuantity || '0';
+            document.getElementById('productExistingPhotoPath').value = data.photoPath || '';
+            document.getElementById('productPhoto').value = '';
+            document.getElementById('productDescription').value = data.description || '';
+            document.getElementById('productRecipeMethod').value = data.recipeMethod || '';
+            document.getElementById('productIsActive').checked = data.isActive === 'true';
+            updateProductPreview(data.photoPath || '');
+
+            form.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+
+        function startCategoryCreateMode() {
+            const form = document.getElementById('categoryEditorForm');
+
+            form.action = categoryCreateAction;
+            document.getElementById('categoryEditorTitle').textContent = 'Новая категория';
+            document.getElementById('categoryEditorSubtitle').textContent = 'Создайте новую категорию для товаров.';
+            document.getElementById('categorySubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Создать категорию';
+
+            document.getElementById('categoryIdEditor').value = '';
+            document.getElementById('categoryNameEditor').value = '';
+        }
+
+        function startCategoryEditMode(button) {
+            const form = document.getElementById('categoryEditorForm');
+            const data = button.dataset;
+
+            form.action = categoryUpdateAction;
+            document.getElementById('categoryEditorTitle').textContent = 'Редактирование категории';
+            document.getElementById('categoryEditorSubtitle').textContent = 'Измените название категории и сохраните изменения.';
+            document.getElementById('categorySubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Сохранить изменения';
+
+            document.getElementById('categoryIdEditor').value = data.categoryId || '';
+            document.getElementById('categoryNameEditor').value = data.nameCategory || '';
+
+            form.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+
+        document.getElementById('productPhoto').addEventListener('change', function (event) {
+            const file = event.target.files?.[0];
+
+            if (!file) {
+                updateProductPreview(document.getElementById('productExistingPhotoPath').value);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (loadEvent) {
+                updateProductPreview(loadEvent.target?.result || '');
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+}

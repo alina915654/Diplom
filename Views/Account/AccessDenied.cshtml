@@ -1,0 +1,22 @@
+@{
+    ViewData["Title"] = "Доступ запрещен";
+}
+
+<article class="surface">
+    <div class="surface-header">
+        <h3>Недостаточно прав</h3>
+    </div>
+
+    <p class="muted" style="margin: 0 0 16px;">
+        У вашей учетной записи нет прав для открытия этого раздела.
+    </p>
+
+    <div class="inline-actions">
+        <a asp-controller="Home" asp-action="Index" class="btn btn-primary">
+            На главную
+        </a>
+        <a asp-controller="Account" asp-action="Logout" class="btn btn-secondary">
+            Выйти
+        </a>
+    </div>
+</article>

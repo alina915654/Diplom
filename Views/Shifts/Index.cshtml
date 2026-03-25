@@ -1,0 +1,147 @@
+@model Diplom.ViewModels.ShiftsIndexViewModel
+
+@section Styles {
+    <style>
+        .shift-status {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 100px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .shift-status-open {
+            color: #6C006C;
+            background: rgba(210, 95, 210, 0.14);
+        }
+
+        .shift-status-closed {
+            color: #1e6b50;
+            background: rgba(76, 175, 80, 0.12);
+        }
+    </style>
+}
+
+<div class="metrics-grid">
+    <article class="metric-card">
+        <p class="metric-title">Открытые смены</p>
+        <p class="metric-value">@Model.OpenShifts</p>
+        <p class="metric-subtitle">Текущие незакрытые смены</p>
+    </article>
+
+    <article class="metric-card">
+        <p class="metric-title">Смен сегодня</p>
+        <p class="metric-value">@Model.TodayShifts</p>
+        <p class="metric-subtitle">Открыто за текущий день</p>
+    </article>
+
+    <article class="metric-card">
+        <p class="metric-title">Закрыто сегодня</p>
+        <p class="metric-value">@Model.ClosedToday</p>
+        <p class="metric-subtitle">Завершенные смены</p>
+    </article>
+
+    <article class="metric-card">
+        <p class="metric-title">Касса на начало</p>
+        <p class="metric-value">@Model.OpeningCashToday.ToString("N2") ₽</p>
+        <p class="metric-subtitle">Сумма стартовых остатков</p>
+    </article>
+
+    <article class="metric-card">
+        <p class="metric-title">Касса на конец</p>
+        <p class="metric-value">@Model.ClosingCashToday.ToString("N2") ₽</p>
+        <p class="metric-subtitle">Сумма по закрытым сменам</p>
+    </article>
+</div>
+
+<div class="two-column">
+    <article class="surface">
+        <div class="surface-header">
+            <h3>Сводка по сотрудникам за месяц</h3>
+        </div>
+
+        @if (Model.Employees.Count == 0)
+        {
+            <div class="dashboard-empty">Нет данных по сменам сотрудников.</div>
+        }
+        else
+        {
+            <div class="rank-list">
+                @foreach (var item in Model.Employees)
+                {
+                    <div class="rank-item">
+                        <div>
+                            <strong>@item.EmployeeName</strong>
+                            <small class="muted">@item.RoleName</small>
+                        </div>
+                        <div style="text-align:right;">
+                            <strong>@item.ShiftCount смен</strong><br />
+                            <small class="muted">@item.TotalCashEnd.ToString("N2") ₽</small>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </article>
+
+    <article class="surface">
+        <div class="surface-header">
+            <h3>Последние смены</h3>
+        </div>
+
+        @if (Model.Shifts.Count == 0)
+        {
+            <div class="dashboard-empty">Смены не найдены.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>Сотрудник</th>
+                            <th>Роль</th>
+                            <th>Дата</th>
+                            <th>Начало</th>
+                            <th>Конец</th>
+                            <th>Касса</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var shift in Model.Shifts)
+                        {
+                            <tr>
+                                <td>@shift.EmployeeName</td>
+                                <td>@shift.RoleName</td>
+                                <td>@shift.ShiftDate.ToString("dd.MM.yyyy")</td>
+                                <td>@shift.StartTime.ToString("HH:mm")</td>
+                                <td>@(shift.EndTime?.ToString("HH:mm") ?? "—")</td>
+                                <td>
+                                    @shift.CashStart.ToString("N2") ₽
+                                    @if (shift.CashEnd is not null)
+                                    {
+                                        <text> / @shift.CashEnd.Value.ToString("N2") ₽</text>
+                                    }
+                                </td>
+                                <td>
+                                    @if (shift.Status == "Открыта")
+                                    {
+                                        <span class="shift-status shift-status-open">Открыта</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="shift-status shift-status-closed">@shift.Status</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </article>
+</div>

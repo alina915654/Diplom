@@ -1,0 +1,697 @@
+@using System.Linq
+@model Diplom.ViewModels.WarehouseIndexViewModel
+
+@{
+    var isEditMode = Model.Editor.InventoryId.HasValue;
+}
+
+@section Styles {
+    <style>
+        .warehouse-grid {
+            display: grid;
+            gap: 18px;
+        }
+
+        .inventory-meta {
+            display: grid;
+            gap: 4px;
+        }
+
+        .inventory-meta strong {
+            line-height: 1.2;
+        }
+
+        .inventory-meta small {
+            color: var(--muted);
+        }
+
+        .warehouse-stats {
+            display: grid;
+            gap: 12px;
+        }
+
+        .warehouse-alert-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(210, 95, 210, 0.16);
+            background: rgba(255, 255, 255, 0.52);
+        }
+
+        .warehouse-alert-card strong {
+            display: block;
+            font-size: 18px;
+            color: var(--primary-dark);
+        }
+
+        .warehouse-alert-card small {
+            color: var(--muted);
+        }
+
+        .expiry-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #7C1F7C;
+            background: rgba(210, 95, 210, 0.14);
+            border: 1px solid rgba(210, 95, 210, 0.18);
+        }
+
+        .expiry-chip-critical {
+            color: #fff;
+            background: linear-gradient(135deg, #A600A6, #D235D2);
+            border-color: transparent;
+        }
+    </style>
+}
+
+<div class="module-stack">
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="flash-banner flash-banner-success module-reveal" style="--delay:0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+
+    @if (TempData["WarningMessage"] is string warningMessage)
+    {
+        <div class="flash-banner flash-banner-warning module-reveal" style="--delay:0;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@warningMessage</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="flash-banner flash-banner-error module-reveal" style="--delay:0;">
+            <i class="bi bi-x-octagon-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <article class="surface module-hero module-reveal" style="--delay:1;">
+        <div class="module-hero__content">
+            <div class="module-hero__icon">
+                <i class="bi bi-box-seam-fill"></i>
+            </div>
+
+            <div class="module-hero__text">
+                <p class="eyebrow">Складской модуль</p>
+                <h3>Склад и остатки</h3>
+                <p class="muted">
+                    Управляйте карточками остатков, контролируйте сроки годности, закупки и складской журнал.
+                    Все изменения синхронизируются с остатком товара и движениями по складу.
+                </p>
+
+                <div class="module-hero__pills">
+                    <span class="module-hero__pill">
+                        <i class="bi bi-boxes"></i>
+                        Всего единиц на складе: <strong>@Model.TotalStockUnits</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-exclamation-diamond-fill"></i>
+                        Низкие остатки: <strong>@Model.LowStockProducts</strong>
+                    </span>
+                    <span class="module-hero__pill">
+                        <i class="bi bi-list-check"></i>
+                        По фильтру найдено: <strong>@Model.InventoryItems.Count</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <form method="get" asp-action="Index" class="surface module-toolbar-surface module-reveal" style="--delay:2;">
+        <div class="module-filter-grid">
+            <label>
+                Поиск
+                <input type="search"
+                       name="searchTerm"
+                       value="@Model.SearchTerm"
+                       placeholder="Товар или категория" />
+            </label>
+
+            <label>
+                Категория
+                <select name="categoryId">
+                    <option value="">Все категории</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.Id" selected="@(Model.CategoryId == category.Id ? "selected" : null)">
+                            @category.Name
+                        </option>
+                    }
+                </select>
+            </label>
+
+            <label>
+                Состояние
+                <select name="stockState">
+                    <option value="all" selected="@(Model.StockState == "all" ? "selected" : null)">Все</option>
+                    <option value="low" selected="@(Model.StockState == "low" ? "selected" : null)">Низкий остаток</option>
+                    <option value="out" selected="@(Model.StockState == "out" ? "selected" : null)">Нет в наличии</option>
+                    <option value="expiring" selected="@(Model.StockState == "expiring" ? "selected" : null)">Скоро истекает</option>
+                    <option value="ok" selected="@(Model.StockState == "ok" ? "selected" : null)">Нормальный остаток</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="module-action-row">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-funnel-fill"></i>
+                Применить фильтры
+            </button>
+
+            <a asp-action="Index" class="btn btn-ghost">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сбросить
+            </a>
+
+            <button type="button" class="btn btn-secondary" onclick="startInventoryCreateMode();">
+                <i class="bi bi-plus-square-fill"></i>
+                Новая карточка
+            </button>
+        </div>
+    </form>
+
+    <div class="metrics-grid">
+        <article class="metric-card module-reveal" style="--delay:3;">
+            <p class="metric-title">Общий остаток</p>
+            <p class="metric-value">@Model.TotalStockUnits</p>
+            <p class="metric-subtitle">Единиц продукции на складе</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:4;">
+            <p class="metric-title">Низкие остатки</p>
+            <p class="metric-value">@Model.LowStockProducts</p>
+            <p class="metric-subtitle">Позиции требуют пополнения</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:5;">
+            <p class="metric-title">Истекают в 7 дней</p>
+            <p class="metric-value">@Model.ExpiringItemsCount</p>
+            <p class="metric-subtitle">Требуют контроля сроков</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:6;">
+            <p class="metric-title">Списания за месяц</p>
+            <p class="metric-value">@Model.WasteThisMonth</p>
+            <p class="metric-subtitle">Единиц брака и потерь</p>
+        </article>
+
+        <article class="metric-card module-reveal" style="--delay:7;">
+            <p class="metric-title">Открытые закупки</p>
+            <p class="metric-value">@Model.OpenPurchaseOrders</p>
+            <p class="metric-subtitle">Заказы поставщикам в работе</p>
+        </article>
+    </div>
+
+    <div class="module-crud-layout">
+        <article class="surface module-reveal" style="--delay:8;">
+            <div class="surface-header">
+                <div>
+                    <h3>Карточки складских остатков</h3>
+                    <p class="muted" style="margin: 6px 0 0;">
+                        Таблица ниже показывает текущий результат поиска и фильтрации.
+                    </p>
+                </div>
+
+                <span class="dashboard-badge">@Model.InventoryItems.Count записей</span>
+            </div>
+
+            @if (Model.InventoryItems.Count == 0)
+            {
+                <div class="dashboard-empty">
+                    По текущим фильтрам карточки остатка не найдены.
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Товар</th>
+                                <th>Остаток</th>
+                                <th>Мин.</th>
+                                <th>Заказ</th>
+                                <th>Срок</th>
+                                <th>Состояние</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.InventoryItems)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="inventory-meta">
+                                            <strong>@item.ProductName</strong>
+                                            <small>@item.CategoryName</small>
+                                        </div>
+                                    </td>
+                                    <td>@item.StockLevel</td>
+                                    <td>@item.MinStockLevel</td>
+                                    <td>@item.ReorderPoint</td>
+                                    <td>@(item.ExpirationDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                    <td>
+                                        @if (item.StockLevel <= 0)
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--muted">Нет в наличии</span>
+                                        }
+                                        else if (item.IsLowStock)
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--warn">Низкий остаток</span>
+                                        }
+                                        else if (item.IsExpiringSoon)
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--warn">Скоро истекает</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="soft-status-chip soft-status-chip--ok">Нормальный</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <button type="button"
+                                                    class="btn btn-ghost btn-sm"
+                                                    onclick="startInventoryEditMode(this);"
+                                                    data-inventory-id="@item.InventoryId"
+                                                    data-product-id="@item.ProductId"
+                                                    data-stock-level="@item.StockLevel"
+                                                    data-min-stock-level="@item.MinStockLevel"
+                                                    data-reorder-point="@item.ReorderPoint"
+                                                    data-expiration-date="@(item.ExpirationDate?.ToString("yyyy-MM-dd") ?? string.Empty)">
+                                                <i class="bi bi-pencil-square"></i>
+                                                Изменить
+                                            </button>
+
+                                            <form asp-action="DeleteInventory"
+                                                  method="post"
+                                                  data-confirm="true"
+                                                  data-confirm-title="Удалить карточку остатка?"
+                                                  data-confirm-message="Карточка остатка будет удалена, а текущий остаток товара будет сброшен до нуля."
+                                                  data-confirm-accept="Удалить">
+                                                <input type="hidden" name="id" value="@item.InventoryId" />
+                                                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                                                <input type="hidden" name="categoryId" value="@Model.CategoryId" />
+                                                <input type="hidden" name="stockState" value="@Model.StockState" />
+
+                                                <button type="submit" class="btn btn-secondary btn-sm">
+                                                    <i class="bi bi-trash3-fill"></i>
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+
+        <aside class="surface sticky-surface module-editor-card module-reveal" style="--delay:9;">
+            <div class="surface-header">
+                <div>
+                    <h3 id="inventoryEditorTitle">@(isEditMode ? "Редактирование остатка" : "Новая карточка остатка")</h3>
+                    <p id="inventoryEditorSubtitle" class="muted" style="margin: 6px 0 0;">
+                        @(isEditMode
+                            ? "Измените параметры карточки и сохраните обновления."
+                            : "Заполните форму для новой карточки складского учета.")
+                    </p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startInventoryCreateMode();">
+                    <i class="bi bi-plus-circle"></i>
+                    Очистить
+                </button>
+            </div>
+
+            <div asp-validation-summary="All" class="flash-banner flash-banner-error validation-banner @(ViewData.ModelState.IsValid ? "hidden" : string.Empty)">
+            </div>
+
+            <form id="inventoryEditorForm"
+                  asp-action="@(isEditMode ? "UpdateInventory" : "CreateInventory")"
+                  method="post"
+                  class="module-stack">
+                <input type="hidden" id="inventoryId" name="InventoryId" value="@Model.Editor.InventoryId" />
+                <input type="hidden" name="searchTerm" value="@Model.SearchTerm" />
+                <input type="hidden" name="categoryId" value="@Model.CategoryId" />
+                <input type="hidden" name="stockState" value="@Model.StockState" />
+
+                <div class="form-grid">
+                    <label class="form-span-2">
+                        Товар
+                        <select id="inventoryProductId" name="ProductId">
+                            <option value="">Выберите товар</option>
+                            @foreach (var product in Model.Products)
+                            {
+                                <option value="@product.Id" selected="@(Model.Editor.ProductId == product.Id ? "selected" : null)">
+                                    @product.Name
+                                </option>
+                            }
+                        </select>
+                    </label>
+
+                    <label>
+                        Остаток
+                        <input id="inventoryStockLevel" type="number" min="0" name="StockLevel" value="@Model.Editor.StockLevel" />
+                    </label>
+
+                    <label>
+                        Минимальный остаток
+                        <input id="inventoryMinStockLevel" type="number" min="0" name="MinStockLevel" value="@Model.Editor.MinStockLevel" />
+                    </label>
+
+                    <label>
+                        Точка заказа
+                        <input id="inventoryReorderPoint" type="number" min="0" name="ReorderPoint" value="@Model.Editor.ReorderPoint" />
+                    </label>
+
+                    <label>
+                        Срок годности
+                        <input id="inventoryExpirationDate"
+                               type="date"
+                               name="ExpirationDate"
+                               value="@(Model.Editor.ExpirationDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                    </label>
+                </div>
+
+                <div class="module-action-row">
+                    <button id="inventorySubmitButton" type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill"></i>
+                        @(isEditMode ? "Сохранить изменения" : "Создать карточку")
+                    </button>
+
+                    <button type="button" class="btn btn-secondary" onclick="startInventoryCreateMode();">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сбросить форму
+                    </button>
+                </div>
+            </form>
+        </aside>
+    </div>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:10;">
+            <div class="surface-header">
+                <h3>Низкие остатки</h3>
+                <span class="dashboard-badge">Приоритет пополнения</span>
+            </div>
+
+            @if (Model.LowStockItems.Count == 0)
+            {
+                <div class="dashboard-empty">Проблемных остатков нет.</div>
+            }
+            else
+            {
+                <div class="rank-list">
+                    @foreach (var item in Model.LowStockItems)
+                    {
+                        <div class="rank-item">
+                            <div>
+                                <strong>@item.ProductName</strong>
+                                <small class="muted">@item.CategoryName</small>
+                            </div>
+                            <div style="text-align: right;">
+                                <strong>@item.StockQuantity</strong><br />
+                                <small class="muted">Порог: @item.Threshold</small>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="surface module-reveal" style="--delay:11;">
+            <div class="surface-header">
+                <h3>Сроки годности</h3>
+                <span class="dashboard-badge">До 7 дней</span>
+            </div>
+
+            @if (Model.ExpiringItems.Count == 0)
+            {
+                <div class="dashboard-empty">Товаров с близким сроком годности нет.</div>
+            }
+            else
+            {
+                <div class="rank-list">
+                    @foreach (var item in Model.ExpiringItems)
+                    {
+                        <div class="rank-item">
+                            <div>
+                                <strong>@item.ProductName</strong>
+                                <small class="muted">Остаток: @item.StockLevel</small>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="expiry-chip @(item.DaysLeft <= 2 ? "expiry-chip-critical" : string.Empty)">
+                                    @(item.DaysLeft == 0 ? "Сегодня" : $"Через {item.DaysLeft} дн.")
+                                </span><br />
+                                <small class="muted">@item.ExpirationDate.ToString("dd.MM.yyyy")</small>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+    </div>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:12;">
+            <div class="surface-header">
+                <h3>Закупки</h3>
+                <span class="dashboard-badge">Поставки</span>
+            </div>
+
+            @if (Model.PurchaseOrders.Count == 0)
+            {
+                <div class="dashboard-empty">Закупок пока нет.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table compact-table">
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>Поставщик</th>
+                                <th>Статус</th>
+                                <th>Дата</th>
+                                <th>Ожидание</th>
+                                <th>Позиций</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.PurchaseOrders)
+                            {
+                                <tr>
+                                    <td>@item.Number</td>
+                                    <td>@item.SupplierName</td>
+                                    <td>@item.Status</td>
+                                    <td>@(item.OrderDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                    <td>@(item.ExpectedArrivalDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                    <td>@item.ItemsCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+
+        <article class="surface module-reveal" style="--delay:13;">
+            <div class="surface-header">
+                <h3>Журнал склада</h3>
+                <span class="dashboard-badge">Последние действия</span>
+            </div>
+
+            @if (Model.Logs.Count == 0)
+            {
+                <div class="dashboard-empty">Операций склада пока нет.</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="data-table compact-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Товар</th>
+                                <th>Действие</th>
+                                <th>Кол-во</th>
+                                <th>Примечание</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Logs)
+                            {
+                                <tr>
+                                    <td>@(item.Timestamp?.ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                    <td>@item.ProductName</td>
+                                    <td>@item.ActionType</td>
+                                    <td>@item.Quantity</td>
+                                    <td>@(string.IsNullOrWhiteSpace(item.Note) ? "—" : item.Note)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </article>
+    </div>
+
+    <article class="surface module-reveal" style="--delay:14;">
+        <div class="surface-header">
+            <h3>Баланс по категориям</h3>
+            <span class="dashboard-badge">Сводка</span>
+        </div>
+
+        @if (Model.Balances.Count == 0)
+        {
+            <div class="dashboard-empty">Нет данных по категориям склада.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>Категория</th>
+                            <th>Остаток</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.Balances)
+                        {
+                            <tr>
+                                <td>@item.CategoryName</td>
+                                <td>@item.TotalStock</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </article>
+
+    <div class="two-column">
+        <article class="surface module-reveal" style="--delay:15;">
+            <div class="surface-header">
+                <h3>Быстрая сводка</h3>
+                <span class="dashboard-badge">Контроль рисков</span>
+            </div>
+
+            <div class="warehouse-stats">
+                <div class="warehouse-alert-card">
+                    <strong>@Model.LowStockProducts</strong>
+                    <small>карточек требуют пополнения по минимальному остатку</small>
+                </div>
+
+                <div class="warehouse-alert-card">
+                    <strong>@Model.ExpiringItemsCount</strong>
+                    <small>позиций имеют срок хранения в пределах 7 дней</small>
+                </div>
+
+                <div class="warehouse-alert-card">
+                    <strong>@Model.OpenPurchaseOrders</strong>
+                    <small>закупок сейчас находятся в работе</small>
+                </div>
+            </div>
+        </article>
+
+        <article class="surface module-reveal" style="--delay:16;">
+            <div class="surface-header">
+                <h3>Текущий фильтр</h3>
+                <span class="dashboard-badge">Навигация</span>
+            </div>
+
+            <div class="warehouse-stats">
+                <div class="warehouse-alert-card">
+                    <strong>@(string.IsNullOrWhiteSpace(Model.SearchTerm) ? "Без текста" : Model.SearchTerm)</strong>
+                    <small>текущий поисковый запрос</small>
+                </div>
+
+                <div class="warehouse-alert-card">
+                    <strong>@(Model.Categories.FirstOrDefault(c => c.Id == Model.CategoryId)?.Name ?? "Все категории")</strong>
+                    <small>активный фильтр по категории</small>
+                </div>
+
+                <div class="warehouse-alert-card">
+                    <strong>
+                        @switch (Model.StockState)
+                        {
+                            case "low":
+                                @:Низкий остаток
+                                break;
+                            case "out":
+                                @:Нет в наличии
+                                break;
+                            case "expiring":
+                                @:Скоро истекает
+                                break;
+                            case "ok":
+                                @:Нормальный остаток
+                                break;
+                            default:
+                                @:Все состояния
+                                break;
+                        }
+                    </strong>
+                    <small>активный режим фильтрации состояния</small>
+                </div>
+            </div>
+        </article>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const inventoryCreateAction = '@Url.Action("CreateInventory", "Warehouse")';
+        const inventoryUpdateAction = '@Url.Action("UpdateInventory", "Warehouse")';
+
+        function startInventoryCreateMode() {
+            const form = document.getElementById('inventoryEditorForm');
+
+            form.action = inventoryCreateAction;
+            document.getElementById('inventoryEditorTitle').textContent = 'Новая карточка остатка';
+            document.getElementById('inventoryEditorSubtitle').textContent = 'Заполните форму для новой карточки складского учета.';
+            document.getElementById('inventorySubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Создать карточку';
+
+            document.getElementById('inventoryId').value = '';
+            document.getElementById('inventoryProductId').value = '';
+            document.getElementById('inventoryStockLevel').value = '0';
+            document.getElementById('inventoryMinStockLevel').value = '5';
+            document.getElementById('inventoryReorderPoint').value = '10';
+            document.getElementById('inventoryExpirationDate').value = '';
+        }
+
+        function startInventoryEditMode(button) {
+            const form = document.getElementById('inventoryEditorForm');
+            const data = button.dataset;
+
+            form.action = inventoryUpdateAction;
+            document.getElementById('inventoryEditorTitle').textContent = 'Редактирование остатка';
+            document.getElementById('inventoryEditorSubtitle').textContent = 'Измените параметры карточки и сохраните обновления.';
+            document.getElementById('inventorySubmitButton').innerHTML = '<i class="bi bi-floppy-fill"></i> Сохранить изменения';
+
+            document.getElementById('inventoryId').value = data.inventoryId || '';
+            document.getElementById('inventoryProductId').value = data.productId || '';
+            document.getElementById('inventoryStockLevel').value = data.stockLevel || '0';
+            document.getElementById('inventoryMinStockLevel').value = data.minStockLevel || '0';
+            document.getElementById('inventoryReorderPoint').value = data.reorderPoint || '0';
+            document.getElementById('inventoryExpirationDate').value = data.expirationDate || '';
+
+            form.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+    </script>
+}
